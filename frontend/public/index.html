@@ -57,6 +57,18 @@
     <!-- ========== MAIN APPLICATION ========== -->
     <div id="app-main" class="hidden">
 
+        <header class="mobile-header" aria-label="Barra de navegación móvil">
+            <button
+                class="mobile-menu-toggle"
+                id="mobile-menu-toggle"
+                type="button"
+                aria-label="Abrir menú"
+                aria-controls="sidebar"
+                aria-expanded="false"
+            >☰</button>
+            <span class="mobile-header-title">Planilla de Pago</span>
+        </header>
+
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
@@ -65,7 +77,7 @@
                     <h2 class="sidebar-title">Planilla de Pago</h2>
                     <span class="sidebar-version">v1.0</span>
                 </div>
-                <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Alternar menú">☰</button>
+                <button class="sidebar-toggle" id="sidebar-close" type="button" aria-label="Cerrar menú">×</button>
             </div>
 
             <nav class="sidebar-nav">
@@ -106,6 +118,8 @@
                 </button>
             </div>
         </aside>
+
+        <button class="sidebar-backdrop" id="sidebar-backdrop" type="button" aria-label="Cerrar menú"></button>
 
         <!-- Main Content -->
         <main class="content" id="main-content">

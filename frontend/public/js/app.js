@@ -51,12 +51,36 @@ class Application {
             });
         }
 
-        // Toggle Sidebar en móvil
-        const sidebarToggle = document.getElementById('sidebar-toggle');
+        // Menú retráctil para tablet y móvil
+        const sidebarToggle = document.getElementById('mobile-menu-toggle');
+        const sidebarClose = document.getElementById('sidebar-close');
+        const sidebarBackdrop = document.getElementById('sidebar-backdrop');
         const sidebar = document.getElementById('sidebar');
-        if (sidebarToggle && sidebar) {
-            sidebarToggle.addEventListener('click', () => {
-                sidebar.classList.toggle('expanded');
+        const setSidebarOpen = (isOpen) => {
+            if (!sidebar) return;
+            sidebar.classList.toggle('open', isOpen);
+            sidebarBackdrop?.classList.toggle('visible', isOpen);
+            document.body.classList.toggle('sidebar-open', isOpen);
+            sidebarToggle?.setAttribute('aria-expanded', String(isOpen));
+        };
+
+        sidebarToggle?.addEventListener('click', () => {
+            setSidebarOpen(!sidebar?.classList.contains('open'));
+        });
+        sidebarClose?.addEventListener('click', () => setSidebarOpen(false));
+        sidebarBackdrop?.addEventListener('click', () => setSidebarOpen(false));
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') setSidebarOpen(false);
+        });
+        window.addEventListener('resize', () => {
+            if (window.innerWidth > 1024) setSidebarOpen(false);
+        });
+
+        if (sidebar) {
+            sidebar.addEventListener('click', (event) => {
+                if (event.target.closest('.nav-link') && window.innerWidth <= 1024) {
+                    setSidebarOpen(false);
+                }
             });
         }
     }
@@ -77,10 +101,13 @@ class Application {
             }
         });
 
-        // Ocultar menú en móvil tras navegar
+        // Ocultar menú retráctil tras navegar
         const sidebar = document.getElementById('sidebar');
-        if (sidebar && sidebar.classList.contains('expanded')) {
-            sidebar.classList.remove('expanded');
+        if (sidebar && sidebar.classList.contains('open') && window.innerWidth <= 1024) {
+            sidebar.classList.remove('open');
+            document.getElementById('sidebar-backdrop')?.classList.remove('visible');
+            document.getElementById('mobile-menu-toggle')?.setAttribute('aria-expanded', 'false');
+            document.body.classList.remove('sidebar-open');
         }
 
         // Mapeo de vistas
