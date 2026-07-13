@@ -1,0 +1,14 @@
+const { validationResult } = require('express-validator');
+const workforce=require('../services/workforce.service'); const audit=require('../services/audit.service');
+const ok=fn=>async(req,res,next)=>{try{const errors=validationResult(req);if(!errors.isEmpty())return res.status(400).json({success:false,error:errors.array()[0].msg});const data=await fn(req);const payload=JSON.parse(JSON.stringify({success:true,data},(_key,value)=>typeof value==='bigint'?value.toString():value));res.json(payload)}catch(e){if(e.code==='P2002')e.statusCode=409;else if(/no encontr|Solo |solapa|debe|disponible|duplic|inactivo|tarifa|monto|multiplicador|retrasos/i.test(e.message))e.statusCode=400;next(e)}};
+exports.createOvertime=ok(async req=>{const row=await workforce.createOvertime(req.body,req.user.id);await audit.record(req,{action:'CREATE',entity:'Overtime',entityId:row.id,employeeId:row.userId,newData:row});return row});
+exports.listOvertime=ok(req=>workforce.list('overtime',req.query));
+exports.updateOvertime=ok(async req=>{const row=await workforce.updateOvertime(req.params.id,req.body,req.user.id);await audit.record(req,{action:'UPDATE',entity:'Overtime',entityId:row.id,employeeId:row.userId,newData:row});return row});
+exports.approveOvertime=ok(async req=>{const row=await workforce.approveOvertime(req.params.id,req.body.status,req.user.id);await audit.record(req,{action:req.body.status,entity:'Overtime',entityId:row.id,employeeId:row.userId,newData:row,reason:req.body.reason});return row});
+exports.removeOvertime=ok(async req=>{const row=await workforce.removeOvertime(req.params.id);await audit.record(req,{action:'DELETE',entity:'Overtime',entityId:row.id,employeeId:row.userId,previousData:row});return {message:'Hora extra eliminada correctamente'};});
+exports.createDiscount=ok(async req=>{const row=await workforce.createDiscount(req.body,req.user.id);await audit.record(req,{action:'CREATE',entity:'Discount',entityId:row.id,employeeId:row.userId,newData:row});return row});
+exports.listDiscounts=ok(req=>workforce.list('discount',req.query));
+exports.approveDiscount=ok(async req=>{const row=await workforce.approveDiscount(req.params.id,req.body.status,req.user.id);await audit.record(req,{action:req.body.status,entity:'Discount',entityId:row.id,employeeId:row.userId,newData:row,reason:req.body.reason});return row});
+exports.listCompensations=ok(req=>workforce.list('timeCompensation',req.query));
+exports.useCompensation=ok(async req=>{const row=await workforce.useCompensation(req.params.id,req.body.hours,req.user.id,req.body.notes);await audit.record(req,{action:'USE',entity:'TimeCompensation',entityId:row.id,employeeId:row.userId,newData:row});return row});
+exports.listAudit=ok(req=>audit.list(req.query));

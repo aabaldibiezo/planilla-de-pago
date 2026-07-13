@@ -1,0 +1,302 @@
+// Prisma Schema — Sistema de Gestión de Nómina
+// Planilla de Pago v2.1
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  EMPLOYEE
+}
+
+enum EmployeeType {
+  FIJO
+  TEMPORAL
+}
+
+enum ScheduleType {
+  FULL_TIME
+  FLEXIBLE
+  SPECIFIC_DAYS
+}
+enum WorkflowStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+enum JustificationStatus {
+  PENDING
+  JUSTIFIED
+  REJECTED
+}
+enum OvertimePaymentMode {
+  SAME_RATE
+  LOWER_RATE
+  HIGHER_RATE
+  MULTIPLIER
+  FIXED_AMOUNT
+  TIME_OFF
+  UNPAID
+}
+enum DiscountType {
+  UNJUSTIFIED_DELAY
+  SALARY_ADVANCE
+  COMPANY_DAMAGE
+  LOAN
+  UNJUSTIFIED_ABSENCE
+  OTHER
+}
+enum PaymentDetailType {
+  INCOME
+  DISCOUNT
+  INFORMATION
+}
+enum CompensationStatus {
+  AVAILABLE
+  PARTIALLY_USED
+  USED
+  CANCELLED
+}
+
+model User {
+  id                 Int            @id @default(autoincrement())
+  email              String         @unique
+  password           String         // Solo usado por ADMIN para login
+  firstName          String
+  lastName           String
+  role               Role           @default(EMPLOYEE)
+  employeeType       EmployeeType   @default(FIJO)
+  monthlySalary      Decimal        @default(0)    // Salario mensual en Bs.
+  monthlyHours       Decimal        @default(160)   // Horas laborales del mes
+  hourlyRate         Decimal        @default(0)     // Calculado: monthlySalary / monthlyHours
+  scheduledEntryTime String         @default("08:00") // Hora de ingreso programada HH:MM
+  isActive           Boolean        @default(true)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  attendances        Attendance[]
+  payments           Payment[]
+  scheduleType       ScheduleType   @default(FULL_TIME)
+  scheduleBlocks     ScheduleBlock[]
+  attendanceSessions AttendanceSession[]
+  overtimeRecords    Overtime[]     @relation("OvertimeEmployee")
+  compensations      TimeCompensation[]
+  discounts          Discount[]     @relation("DiscountEmployee")
+  auditLogs           AuditLog[]     @relation("AuditActor")
+}
+
+model ScheduleBlock {
+  id Int @id @default(autoincrement())
+  userId Int
+  user User @relation(fields: [userId], references: [id])
+  dayOfWeek Int
+  startTime String
+  endTime String
+  blockOrder Int @default(1)
+  crossesMidnight Boolean @default(false)
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy Int?
+  updatedBy Int?
+  attendanceSessions AttendanceSession[]
+  @@unique([userId, dayOfWeek, startTime, endTime])
+  @@index([userId, dayOfWeek, isActive])
+}
+
+model Attendance {
+  id             Int      @id @default(autoincrement())
+  userId         Int
+  user           User     @relation(fields: [userId], references: [id])
+  date           DateTime @db.Date
+  scheduledEntry String   // HH:MM — Hora programada de ingreso
+  actualEntry    String   // HH:MM — Hora real de ingreso
+  actualExit     String?  // HH:MM — Hora real de salida (opcional hasta que marque salida)
+  hoursWorked    Decimal  @default(0) // Horas efectivamente trabajadas en el día
+  delayMinutes   Int      @default(0) // Minutos de retraso (calculado)
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  sessions       AttendanceSession[]
+  createdBy      Int?
+  updatedBy      Int?
+
+  @@unique([userId, date]) // Un registro por empleado por día
+}
+
+model AttendanceSession {
+  id Int @id @default(autoincrement())
+  userId Int
+  user User @relation(fields: [userId], references: [id])
+  attendanceId Int?
+  attendance Attendance? @relation(fields: [attendanceId], references: [id])
+  scheduleBlockId Int?
+  scheduleBlock ScheduleBlock? @relation(fields: [scheduleBlockId], references: [id])
+  workDate DateTime @db.Date
+  clockIn DateTime
+  clockOut DateTime?
+  workedMinutes Int @default(0)
+  delayMinutes Int @default(0)
+  earlyDepartureMinutes Int @default(0)
+  justificationStatus JustificationStatus @default(PENDING)
+  justificationReason String?
+  justificationNotes String?
+  justificationRequestedAt DateTime?
+  justificationCreatedBy Int?
+  justificationReviewedBy Int?
+  justificationReviewedAt DateTime?
+  decisionReason String?
+  createdBy Int?
+  updatedBy Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([userId, workDate])
+}
+
+model Overtime {
+  id Int @id @default(autoincrement())
+  userId Int
+  user User @relation("OvertimeEmployee", fields: [userId], references: [id])
+  workDate DateTime @db.Date
+  startTime String
+  endTime String
+  hours Decimal
+  reason String
+  status WorkflowStatus @default(PENDING)
+  paymentMode OvertimePaymentMode
+  hourlyRateSnapshot Decimal @default(0)
+  multiplier Decimal @default(1)
+  fixedAmount Decimal?
+  calculatedAmount Decimal @default(0)
+  notes String?
+  requestedBy Int
+  approvedBy Int?
+  approvedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  compensations TimeCompensation[]
+  paymentDetails PaymentDetail[]
+  @@index([userId, workDate, status])
+}
+
+model TimeCompensation {
+  id Int @id @default(autoincrement())
+  userId Int
+  user User @relation(fields: [userId], references: [id])
+  overtimeId Int? @unique
+  overtime Overtime? @relation(fields: [overtimeId], references: [id])
+  generatedHours Decimal
+  usedHours Decimal @default(0)
+  remainingHours Decimal
+  generatedAt DateTime
+  usedAt DateTime?
+  reason String
+  authorizedBy Int
+  notes String?
+  status CompensationStatus @default(AVAILABLE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  paymentDetails PaymentDetail[]
+  @@index([userId, status])
+}
+
+model Discount {
+  id Int @id @default(autoincrement())
+  userId Int
+  user User @relation("DiscountEmployee", fields: [userId], references: [id])
+  type DiscountType
+  amount Decimal
+  discountDate DateTime @db.Date
+  description String
+  status WorkflowStatus @default(PENDING)
+  createdBy Int
+  approvedBy Int?
+  approvedAt DateTime?
+  notes String?
+  documentReference String?
+  paymentId Int?
+  payment Payment? @relation(fields: [paymentId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  paymentDetails PaymentDetail[]
+  @@index([userId, discountDate, status])
+}
+
+model Payment {
+  id                Int      @id @default(autoincrement())
+  userId            Int
+  user              User     @relation(fields: [userId], references: [id])
+  month             Int      // 1-12
+  year              Int
+  monthlySalary     Decimal  // Salario mensual al momento del pago
+  hourlyRate        Decimal  // Tarifa/hora al momento del pago
+  totalHours        Decimal  @default(0) // Total horas efectivamente trabajadas en el mes
+  totalDelayMinutes Int      @default(0) // Total minutos de retraso en el mes
+  delayHours        Decimal  @default(0) // totalDelayMinutes / 60
+  discountAmount    Decimal  @default(0) // delayHours × hourlyRate
+  grossPay          Decimal  @default(0) // totalHours × hourlyRate
+  netPay            Decimal  // grossPay - discountAmount
+  paidAt            DateTime @default(now())
+  pdfPath           String?  // Ruta al archivo PDF del comprobante
+  emailSent         Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  totalIncome       Decimal @default(0)
+  totalDiscounts    Decimal @default(0)
+  overtimeAmount    Decimal @default(0)
+  justifiedDelayMinutes Int @default(0)
+  createdBy         Int?
+  updatedBy         Int?
+  pdfGeneratedAt    DateTime?
+  emailError        String?
+  emailRetryRequired Boolean @default(false)
+  details           PaymentDetail[]
+  discounts         Discount[]
+
+  @@unique([userId, month, year]) // Bloquea pagos duplicados del mismo mes
+}
+
+model PaymentDetail {
+  id Int @id @default(autoincrement())
+  paymentId Int
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  type PaymentDetailType
+  code String
+  description String
+  quantity Decimal?
+  rate Decimal?
+  amount Decimal
+  overtimeId Int?
+  overtime Overtime? @relation(fields: [overtimeId], references: [id])
+  discountId Int?
+  discount Discount? @relation(fields: [discountId], references: [id])
+  compensationId Int?
+  compensation TimeCompensation? @relation(fields: [compensationId], references: [id])
+  metadata Json?
+  createdAt DateTime @default(now())
+  @@index([paymentId, type])
+}
+
+model AuditLog {
+  id BigInt @id @default(autoincrement())
+  actorId Int?
+  actor User? @relation("AuditActor", fields: [actorId], references: [id])
+  action String
+  entity String
+  entityId String
+  employeeId Int?
+  reason String?
+  previousData Json?
+  newData Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  @@index([createdAt])
+  @@index([actorId, entity, action])
+  @@index([employeeId])
+}
