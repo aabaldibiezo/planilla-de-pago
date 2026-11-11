@@ -1,0 +1,54 @@
+name: planilla_movil
+description: Registro de asistencia para el personal de limpieza.
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Cámara en vivo. Es la ÚNICA fuente de la foto de marcaje: no se incluye
+  # `image_picker` ni ningún selector de archivos, de modo que no existe una
+  # ruta hacia la galería.
+  camera: ^0.11.0
+
+  # Ubicación para el geocerco. La comparación ocurre en el servidor.
+  geolocator: ^13.0.2
+
+  http: ^1.2.2
+
+  # El token se guarda en el almacén cifrado del sistema, no en texto plano.
+  flutter_secure_storage: ^9.2.2
+
+  # Guardar y abrir el PDF de la boleta descargada.
+  path_provider: ^2.1.5
+  open_filex: ^4.5.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+# `path_provider` arrastra `path_provider_foundation`, la implementación de
+# iOS/macOS, y desde su versión 2.5 esta depende de `objective_c`, que exige la
+# función de "assets nativos" de Flutter.
+#
+# Este proyecto es solo Android (no hay carpetas ios/ ni macos/), así que ese
+# código nunca se ejecuta. Pero el compilador evalúa igual sus hooks, y el
+# ejecutor de hooks no entrecomilla la ruta del SDK: con Flutter instalado en
+# "C:\D DISCO\flutter" —con un espacio— la compilación muere con
+# «"C:\D" no se reconoce como un comando».
+#
+# Fijar la versión anterior saca `objective_c` del grafo y el problema
+# desaparece sin tocar la instalación de Flutter.
+#
+# Se puede quitar este bloque cuando Flutter viva en una ruta sin espacios,
+# o si se agrega soporte de iOS (ahí sí haría falta la versión nueva).
+dependency_overrides:
+  path_provider_foundation: 2.4.1
+
+flutter:
+  uses-material-design: true

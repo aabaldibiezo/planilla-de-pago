@@ -14,7 +14,9 @@
     "lint": "node scripts/lint.js",
     "prisma:deploy": "prisma migrate deploy",
     "seed": "node prisma/seed.js",
-    "seed:test-payroll": "node prisma/seed-test-payroll.js"
+    "seed:test-payroll": "node prisma/seed-test-payroll.js",
+    "seed:plans": "node prisma/seed-plans.js",
+    "reset:clientes": "node prisma/reset-clientes.js"
   },
   "dependencies": {
     "@prisma/client": "^6.9.0",

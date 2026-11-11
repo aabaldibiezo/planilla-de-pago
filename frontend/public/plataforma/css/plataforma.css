@@ -1,0 +1,779 @@
+/* ============================================================
+   PANEL DE ADMINISTRACIÓN DE PLATAFORMA
+   ------------------------------------------------------------
+   Identidad visual deliberadamente distinta del panel de las
+   empresas cliente (que es oscuro con acento índigo). Acá el tema
+   es claro con acento verde azulado: al abrirlo no debe haber
+   ninguna duda de en qué panel se está.
+   ============================================================ */
+
+:root {
+  /* Marca de plataforma */
+  --pl-brand: #0f766e;
+  --pl-brand-strong: #115e59;
+  --pl-brand-soft: #ccfbf1;
+  --pl-brand-contrast: #ffffff;
+
+  /* Superficies */
+  --pl-bg: #f1f5f9;
+  --pl-surface: #ffffff;
+  --pl-surface-alt: #f8fafc;
+  --pl-border: #e2e8f0;
+  --pl-border-strong: #cbd5e1;
+
+  /* Texto */
+  --pl-text: #0f172a;
+  --pl-text-soft: #475569;
+  --pl-text-muted: #94a3b8;
+
+  /* Semáforo de suscripción */
+  --pl-ok: #15803d;
+  --pl-ok-bg: #dcfce7;
+  --pl-warn: #b45309;
+  --pl-warn-bg: #fef3c7;
+  --pl-danger: #b91c1c;
+  --pl-danger-bg: #fee2e2;
+
+  --pl-radius: 12px;
+  --pl-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 12px rgba(15, 23, 42, 0.04);
+  --pl-shadow-lg: 0 10px 40px rgba(15, 23, 42, 0.16);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--pl-bg);
+  color: var(--pl-text);
+  font-family:
+    'Inter',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.oculto {
+  display: none !important;
+}
+
+/* ============================================================
+   ACCESO
+   ============================================================ */
+
+.acceso {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: linear-gradient(160deg, #0f766e 0%, #134e4a 55%, #0f172a 100%);
+}
+
+.acceso-tarjeta {
+  width: 100%;
+  max-width: 420px;
+  background: var(--pl-surface);
+  border-radius: 18px;
+  padding: 40px 36px;
+  box-shadow: var(--pl-shadow-lg);
+}
+
+.acceso-marca {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.marca-simbolo {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--pl-brand);
+  color: var(--pl-brand-contrast);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.marca-nombre {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* Etiqueta que deja explícito de qué panel se trata. */
+.etiqueta-panel {
+  display: inline-block;
+  margin: 14px 0 28px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--pl-brand-soft);
+  color: var(--pl-brand-strong);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.campo {
+  margin-bottom: 18px;
+}
+
+.campo label {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--pl-text-soft);
+  margin-bottom: 6px;
+}
+
+.campo input,
+.campo select {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 15px;
+  font-family: inherit;
+  color: var(--pl-text);
+  background: var(--pl-surface);
+  border: 1px solid var(--pl-border-strong);
+  border-radius: 9px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.campo input:focus,
+.campo select:focus {
+  border-color: var(--pl-brand);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.14);
+}
+
+.boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.boton-primario {
+  background: var(--pl-brand);
+  color: var(--pl-brand-contrast);
+}
+
+.boton-primario:hover {
+  background: var(--pl-brand-strong);
+}
+
+.boton-secundario {
+  background: var(--pl-surface);
+  color: var(--pl-text-soft);
+  border-color: var(--pl-border-strong);
+}
+
+.boton-secundario:hover {
+  background: var(--pl-surface-alt);
+}
+
+.boton-ancho {
+  width: 100%;
+}
+
+.mensaje-error {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--pl-danger-bg);
+  color: var(--pl-danger);
+  font-size: 14px;
+}
+
+.nota-demo {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--pl-border);
+  font-size: 12.5px;
+  color: var(--pl-text-muted);
+  line-height: 1.6;
+}
+
+/* ============================================================
+   ESTRUCTURA PRINCIPAL
+   ============================================================ */
+
+.barra-superior {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 28px;
+  background: var(--pl-surface);
+  border-bottom: 1px solid var(--pl-border);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.barra-izquierda {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.barra-derecha {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.usuario-actual {
+  font-size: 13.5px;
+  color: var(--pl-text-soft);
+}
+
+.contenido {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 28px;
+}
+
+.titulo-pagina {
+  font-size: 25px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  margin: 0 0 4px;
+}
+
+.subtitulo-pagina {
+  margin: 0 0 26px;
+  color: var(--pl-text-soft);
+  font-size: 14.5px;
+}
+
+/* ============================================================
+   INDICADORES
+   ============================================================ */
+
+.indicadores {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 16px;
+  margin-bottom: 26px;
+}
+
+.indicador {
+  background: var(--pl-surface);
+  border: 1px solid var(--pl-border);
+  border-radius: var(--pl-radius);
+  padding: 18px 20px;
+  box-shadow: var(--pl-shadow);
+}
+
+.indicador-etiqueta {
+  font-size: 13px;
+  color: var(--pl-text-soft);
+  margin-bottom: 6px;
+}
+
+.indicador-valor {
+  font-size: 27px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.indicador-ok .indicador-valor {
+  color: var(--pl-ok);
+}
+.indicador-warn .indicador-valor {
+  color: var(--pl-warn);
+}
+.indicador-danger .indicador-valor {
+  color: var(--pl-danger);
+}
+
+/* ============================================================
+   FILTROS
+   ============================================================ */
+
+.filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.buscador {
+  flex: 1;
+  min-width: 220px;
+  padding: 10px 14px;
+  font-size: 14.5px;
+  font-family: inherit;
+  border: 1px solid var(--pl-border-strong);
+  border-radius: 9px;
+  background: var(--pl-surface);
+  outline: none;
+}
+
+.buscador:focus {
+  border-color: var(--pl-brand);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.14);
+}
+
+.chip {
+  padding: 8px 14px;
+  font-size: 13.5px;
+  font-weight: 600;
+  font-family: inherit;
+  border-radius: 999px;
+  border: 1px solid var(--pl-border-strong);
+  background: var(--pl-surface);
+  color: var(--pl-text-soft);
+  cursor: pointer;
+}
+
+.chip[aria-pressed='true'] {
+  background: var(--pl-brand);
+  border-color: var(--pl-brand);
+  color: var(--pl-brand-contrast);
+}
+
+/* ============================================================
+   TABLA DE EMPRESAS
+   ============================================================ */
+
+.tabla-contenedor {
+  background: var(--pl-surface);
+  border: 1px solid var(--pl-border);
+  border-radius: var(--pl-radius);
+  box-shadow: var(--pl-shadow);
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14.5px;
+}
+
+thead th {
+  text-align: left;
+  padding: 13px 18px;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--pl-text-muted);
+  background: var(--pl-surface-alt);
+  border-bottom: 1px solid var(--pl-border);
+  white-space: nowrap;
+}
+
+tbody td {
+  padding: 15px 18px;
+  border-bottom: 1px solid var(--pl-border);
+  vertical-align: middle;
+}
+
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+tbody tr:hover {
+  background: var(--pl-surface-alt);
+}
+
+.celda-empresa {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.avatar-empresa {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--pl-brand-soft);
+  color: var(--pl-brand-strong);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.nombre-empresa {
+  font-weight: 600;
+}
+
+.dato-secundario {
+  font-size: 13px;
+  color: var(--pl-text-muted);
+}
+
+.monto {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.alineado-derecha {
+  text-align: right;
+}
+
+/* ============================================================
+   SEMÁFORO DE SUSCRIPCIÓN
+   ------------------------------------------------------------
+   El color nunca va solo: cada estado lleva también un punto y
+   un texto. Un semáforo basado solo en color deja afuera a
+   quienes no distinguen rojo y verde.
+   ============================================================ */
+
+.estado {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px 5px 9px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.estado::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.estado-activa {
+  background: var(--pl-ok-bg);
+  color: var(--pl-ok);
+}
+.estado-por-vencer {
+  background: var(--pl-warn-bg);
+  color: var(--pl-warn);
+}
+.estado-suspendida {
+  background: var(--pl-danger-bg);
+  color: var(--pl-danger);
+}
+
+/* Franja lateral: refuerza el estado sin depender del color solo. */
+.fila-por-vencer td:first-child {
+  box-shadow: inset 3px 0 0 var(--pl-warn);
+}
+.fila-suspendida td:first-child {
+  box-shadow: inset 3px 0 0 var(--pl-danger);
+}
+
+.sin-resultados {
+  padding: 48px 20px;
+  text-align: center;
+  color: var(--pl-text-muted);
+}
+
+/* ============================================================
+   PANEL LATERAL DE HISTORIAL
+   ============================================================ */
+
+.velo {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 40;
+}
+
+.panel-lateral {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(520px, 100vw);
+  background: var(--pl-surface);
+  box-shadow: var(--pl-shadow-lg);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-cabecera {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 24px;
+  border-bottom: 1px solid var(--pl-border);
+}
+
+.panel-cuerpo {
+  padding: 22px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.cerrar {
+  background: none;
+  border: none;
+  font-size: 26px;
+  line-height: 1;
+  color: var(--pl-text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.cerrar:hover {
+  color: var(--pl-text);
+}
+
+.resumen-suscripcion {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  padding: 16px;
+  background: var(--pl-surface-alt);
+  border: 1px solid var(--pl-border);
+  border-radius: 10px;
+  margin-bottom: 24px;
+}
+
+.resumen-item-etiqueta {
+  font-size: 12.5px;
+  color: var(--pl-text-muted);
+  margin-bottom: 2px;
+}
+
+.resumen-item-valor {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.titulo-seccion {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--pl-text-muted);
+  margin: 0 0 12px;
+}
+
+.pago {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--pl-border);
+}
+
+.pago:last-child {
+  border-bottom: none;
+}
+
+.pago-periodo {
+  font-weight: 600;
+}
+
+/* ============================================================
+   NAVEGACIÓN ENTRE SECCIONES
+   ============================================================ */
+
+.navegacion {
+  display: flex;
+  gap: 4px;
+  background: var(--pl-surface-alt);
+  border: 1px solid var(--pl-border);
+  border-radius: var(--pl-radius);
+  padding: 4px;
+}
+
+.pestania {
+  border: none;
+  background: transparent;
+  color: var(--pl-text-soft);
+  font: inherit;
+  font-weight: 500;
+  padding: 7px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.pestania:hover {
+  color: var(--pl-text);
+}
+
+.pestania.activa {
+  background: var(--pl-surface);
+  color: var(--pl-brand-strong);
+  font-weight: 600;
+  box-shadow: var(--pl-shadow);
+}
+
+.encabezado-seccion {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* ============================================================
+   USO DEL PLAN
+   ============================================================ */
+
+.uso {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* Una empresa al tope de su plan no puede sumar empleados: se marca
+   para que se note sin tener que comparar los dos números. */
+.uso-al-limite {
+  color: var(--pl-warn);
+  background: var(--pl-warn-bg);
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+
+/* ============================================================
+   FORMULARIOS
+   ============================================================ */
+
+.formulario {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 8px;
+}
+
+.campo-doble {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.panel-cuerpo .campo label,
+.tarjeta-plan label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--pl-text-soft);
+  margin-bottom: 6px;
+}
+
+.panel-cuerpo input,
+.panel-cuerpo select,
+.tarjeta-plan input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--pl-border-strong);
+  border-radius: 8px;
+  background: var(--pl-surface);
+  color: var(--pl-text);
+  font: inherit;
+}
+
+.panel-cuerpo input:focus,
+.panel-cuerpo select:focus,
+.tarjeta-plan input:focus {
+  outline: none;
+  border-color: var(--pl-brand);
+  box-shadow: 0 0 0 3px var(--pl-brand-soft);
+}
+
+.ayuda-campo {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--pl-text-muted);
+}
+
+/* Confirmación y advertencia comparten caja con el error, y se
+   distinguen solo por color: la posición ya es conocida. */
+.mensaje-ok {
+  color: var(--pl-ok);
+  background: var(--pl-ok-bg);
+  border: 1px solid var(--pl-ok);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 18px;
+}
+
+/* ============================================================
+   PLANES
+   ============================================================ */
+
+.rejilla-planes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+  margin-top: 22px;
+}
+
+.tarjeta-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--pl-surface);
+  border: 1px solid var(--pl-border);
+  border-radius: var(--pl-radius);
+  padding: 20px;
+  box-shadow: var(--pl-shadow);
+}
+
+.plan-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.plan-codigo {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--pl-brand-strong);
+  background: var(--pl-brand-soft);
+  border-radius: 6px;
+  padding: 3px 10px;
+}
+
+@media (max-width: 720px) {
+  .contenido {
+    padding: 18px;
+  }
+  .barra-superior {
+    padding: 12px 18px;
+  }
+  .resumen-suscripcion {
+    grid-template-columns: 1fr;
+  }
+  .navegacion {
+    order: 3;
+    width: 100%;
+  }
+  .pestania {
+    flex: 1;
+    text-align: center;
+  }
+  .campo-doble {
+    grid-template-columns: 1fr;
+  }
+}

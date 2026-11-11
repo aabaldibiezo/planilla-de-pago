@@ -5,12 +5,13 @@ class AuthManager {
     constructor() {
         this.token = localStorage.getItem('token') || null;
         this.user = null;
+        this.mustChangePassword = false;
 
         const savedUser = localStorage.getItem('user');
         if (savedUser) {
             try {
                 this.user = JSON.parse(savedUser);
-            } catch (e) {
+            } catch {
                 localStorage.removeItem('user');
             }
         }
@@ -59,7 +60,7 @@ class AuthManager {
             try {
                 const meRes = await window.api.getMe();
                 user = meRes.data || meRes;
-            } catch (e) {
+            } catch {
                 // Si no hay endpoint /me, usar los datos del login
                 user = { email, role: 'EMPLOYEE' };
             }
@@ -69,8 +70,27 @@ class AuthManager {
         localStorage.setItem('user', JSON.stringify(user));
         localStorage.setItem('token', token);
 
+        // El backend bloquea toda ruta de negocio hasta que se cambie la
+        // contraseña temporal, así que el cliente lleva directo a esa pantalla.
+        this.mustChangePassword = Boolean(resData.mustChangePassword ?? user.mustChangePassword);
+
         this.showApp();
         return user;
+    }
+
+    /**
+     * Marca la contraseña como ya definida y refresca el usuario en memoria.
+     */
+    clearPasswordChangeRequirement() {
+        this.mustChangePassword = false;
+        if (this.user) {
+            this.user.mustChangePassword = false;
+            localStorage.setItem('user', JSON.stringify(this.user));
+        }
+    }
+
+    requiresPasswordChange() {
+        return Boolean(this.mustChangePassword ?? this.user?.mustChangePassword);
     }
 
     /**
@@ -135,9 +155,9 @@ class AuthManager {
 
         if (roleEl) {
             const roleLabels = {
-                'ADMIN': 'Administrador',
-                'EMPLOYEE': 'Empleado',
-                'MANAGER': 'Gerente',
+                ADMIN: 'Administrador',
+                EMPLOYEE: 'Empleado',
+                MANAGER: 'Gerente',
             };
             roleEl.textContent = roleLabels[this.user.role] || this.user.role || 'Empleado';
         }
@@ -153,7 +173,7 @@ class AuthManager {
      */
     updateAdminVisibility() {
         const adminElements = document.querySelectorAll('.admin-only');
-        adminElements.forEach(el => {
+        adminElements.forEach((el) => {
             if (this.isAdmin()) {
                 if (el.classList.contains('nav-link')) {
                     el.style.display = 'flex';

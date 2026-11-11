@@ -36,6 +36,8 @@ services:
       EMAIL_FROM: ${EMAIL_FROM:-}
       SMTP_REJECT_UNAUTHORIZED: ${SMTP_REJECT_UNAUTHORIZED:-true}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3015}
+      # Enlace que se incluye en el correo de credenciales.
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:3015}
       CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
       CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}

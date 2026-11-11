@@ -13,7 +13,11 @@ Para migrar datos existentes, exportar la base local con `pg_dump --format=custo
 
 ## 2. Cloudinary
 
-Crear credenciales restringidas al entorno de producción. El backend sube cada boleta como recurso `raw` bajo `planilla/boletas/<año>/<mes>/`, guarda la URL HTTPS en `Payment.pdfPath`, adjunta el archivo al correo y elimina la copia temporal del contenedor.
+Crear credenciales restringidas al entorno de producción. El backend sube cada boleta como recurso `raw` bajo `planilla/boletas/<año>/<mes>/`, guarda la URL HTTPS en `Payment.pdfPath` y elimina la copia temporal del contenedor.
+
+La boleta **no se envía por correo**: queda disponible para descarga desde el panel de la empresa y desde la aplicación del empleado. Si la generación o la subida fallan, el pago se conserva y quedan `emailError` y `emailRetryRequired=true` para trazabilidad; `node scripts/reparar-boletas.js --aplicar` la regenera después.
+
+Las fotos de marcaje se suben a la misma cuenta bajo `planilla/asistencia/<fecha>/`. En producción `CLOUDINARY_*` es obligatorio: el disco del contenedor es efímero y las fotos se perderían en cada despliegue.
 
 ## 3. Railway
 
@@ -29,7 +33,15 @@ Cuando Vercel asigne el dominio final, actualizar `CORS_ORIGINS` en Railway y re
 
 ## 5. SMTP
 
-Configurar `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM` y `SMTP_REJECT_UNAUTHORIZED`. Puerto 465 activa TLS directo; 587 usa STARTTLS. Si el envío falla, el pago y su PDF se conservan, y quedan `emailError` y `emailRetryRequired=true` para trazabilidad.
+Configurar `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`, `SMTP_REJECT_UNAUTHORIZED` y `APP_PUBLIC_URL`. Puerto 465 activa TLS directo; 587 usa STARTTLS.
+
+El correo se usa para dos cosas: enviar credenciales de primer acceso (a empleados, a administradores de empresa y a súper administradores) y avisar a una empresa dos días antes de que venza su suscripción. `APP_PUBLIC_URL` es el enlace que se incluye en el correo de credenciales; si queda vacío, el correo se envía igual pero sin enlace.
+
+Un fallo de SMTP nunca revierte la operación: el alta queda hecha y el motivo se guarda en `credentialsError` para que el administrador pueda reenviar las credenciales desde el panel.
+
+## 6. Suscripciones y multiempresa
+
+El despliegue de este modelo tiene su propia guía en [MULTIEMPRESA.md](MULTIEMPRESA.md): migraciones (dos de ellas no se pueden fusionar), planes iniciales, cuenta de súper administrador y el script que deja el sistema sin clientes.
 
 ## Verificación posterior
 

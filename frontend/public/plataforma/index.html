@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Administración de Plataforma</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/plataforma.css?v=2" />
+  </head>
+  <body>
+    <!-- ========== ACCESO ========== -->
+    <div class="acceso" id="pantalla-acceso">
+      <div class="acceso-tarjeta">
+        <div class="acceso-marca">
+          <span class="marca-simbolo" aria-hidden="true">◆</span>
+          <span class="marca-nombre">Planilla</span>
+        </div>
+
+        <span class="etiqueta-panel">Panel de Administración de Plataforma</span>
+
+        <form id="form-acceso" autocomplete="off">
+          <div class="campo">
+            <label for="acceso-email">Correo</label>
+            <input type="email" id="acceso-email" placeholder="usted@plataforma.com" required />
+          </div>
+
+          <div class="campo">
+            <label for="acceso-clave">Contraseña</label>
+            <input type="password" id="acceso-clave" placeholder="••••••••" required />
+          </div>
+
+          <div id="acceso-error" class="mensaje-error oculto"></div>
+
+          <button type="submit" class="boton boton-primario boton-ancho" id="btn-ingresar">
+            Ingresar
+          </button>
+        </form>
+
+        <p class="nota-demo">
+          Acceso exclusivo para la administración de la plataforma. Las empresas clientes ingresan
+          por su propio panel.
+        </p>
+      </div>
+    </div>
+
+    <!-- ========== CAMBIO DE CONTRASEÑA OBLIGATORIO ==========
+         Una cuenta creada desde el panel nace con contraseña temporal, y el
+         backend rechaza todas las rutas de plataforma hasta que se cambie.
+         Sin esta pantalla, esa cuenta quedaría bloqueada sin salida. -->
+    <div class="acceso oculto" id="pantalla-clave">
+      <div class="acceso-tarjeta">
+        <div class="acceso-marca">
+          <span class="marca-simbolo" aria-hidden="true">◆</span>
+          <span class="marca-nombre">Planilla</span>
+        </div>
+
+        <span class="etiqueta-panel">Defina su contraseña</span>
+
+        <p class="dato-secundario" style="margin-bottom: 18px">
+          Su cuenta usa una contraseña temporal. Elija una propia para continuar.
+        </p>
+
+        <form id="form-clave" autocomplete="off">
+          <div class="campo">
+            <label for="clave-actual">Contraseña temporal</label>
+            <input type="password" id="clave-actual" required />
+          </div>
+
+          <div class="campo">
+            <label for="clave-nueva">Contraseña nueva</label>
+            <input type="password" id="clave-nueva" required minlength="8" />
+            <span class="ayuda-campo">Mínimo 8 caracteres, con letras y números.</span>
+          </div>
+
+          <div class="campo">
+            <label for="clave-repetir">Repetir contraseña nueva</label>
+            <input type="password" id="clave-repetir" required minlength="8" />
+          </div>
+
+          <div id="clave-error" class="mensaje-error oculto"></div>
+
+          <button type="submit" class="boton boton-primario boton-ancho" id="btn-guardar-clave">
+            Guardar y continuar
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- ========== PANEL ========== -->
+    <div id="pantalla-panel" class="oculto">
+      <header class="barra-superior">
+        <div class="barra-izquierda">
+          <span class="marca-simbolo" aria-hidden="true">◆</span>
+          <div>
+            <div class="marca-nombre">Planilla</div>
+            <div class="dato-secundario">Administración de Plataforma</div>
+          </div>
+        </div>
+
+        <nav class="navegacion" aria-label="Secciones">
+          <button class="pestania activa" data-seccion="empresas">Empresas</button>
+          <button class="pestania" data-seccion="planes">Planes</button>
+          <button class="pestania" data-seccion="administradores">Administradores</button>
+        </nav>
+
+        <div class="barra-derecha">
+          <span class="usuario-actual" id="usuario-actual"></span>
+          <button class="boton boton-secundario" id="btn-salir">Salir</button>
+        </div>
+      </header>
+
+      <main class="contenido">
+        <div id="aviso-global" class="mensaje-error oculto" role="alert"></div>
+
+        <!-- ---------- EMPRESAS ---------- -->
+        <section id="seccion-empresas">
+          <div class="encabezado-seccion">
+            <div>
+              <h1 class="titulo-pagina">Empresas suscritas</h1>
+              <p class="subtitulo-pagina">
+                Plan contratado, uso sobre el límite, estado de suscripción y próximo vencimiento.
+              </p>
+            </div>
+            <button class="boton boton-primario" id="btn-nueva-empresa">Nueva empresa</button>
+          </div>
+
+          <section
+            class="indicadores"
+            id="indicadores"
+            aria-label="Resumen de suscripciones"
+          ></section>
+
+          <div class="filtros">
+            <input
+              type="search"
+              class="buscador"
+              id="buscador"
+              placeholder="Buscar empresa por nombre…"
+              aria-label="Buscar empresa"
+            />
+            <button class="chip" data-filtro="TODAS" aria-pressed="true">Todas</button>
+            <button class="chip" data-filtro="ACTIVA" aria-pressed="false">Activas</button>
+            <button class="chip" data-filtro="POR_VENCER" aria-pressed="false">Por vencer</button>
+            <button class="chip" data-filtro="SUSPENDIDA" aria-pressed="false">Solo lectura</button>
+          </div>
+
+          <div class="tabla-contenedor">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Empresa</th>
+                  <th scope="col">Plan</th>
+                  <th scope="col" class="alineado-derecha">Empleados</th>
+                  <th scope="col">Estado</th>
+                  <th scope="col">Próximo vencimiento</th>
+                  <th scope="col" class="alineado-derecha">Cuota</th>
+                  <th scope="col" class="alineado-derecha">Gestión</th>
+                </tr>
+              </thead>
+              <tbody id="cuerpo-tabla"></tbody>
+            </table>
+            <div class="sin-resultados oculto" id="sin-resultados">
+              No hay empresas que coincidan con la búsqueda.
+            </div>
+          </div>
+        </section>
+
+        <!-- ---------- PLANES ---------- -->
+        <section id="seccion-planes" class="oculto">
+          <h1 class="titulo-pagina">Planes</h1>
+          <p class="subtitulo-pagina">
+            Nombre, límite de empleados y precio mensual en dólares. Bajar un límite no da de baja
+            a nadie: solo impide que esas empresas agreguen empleados nuevos.
+          </p>
+          <div class="rejilla-planes" id="rejilla-planes"></div>
+        </section>
+
+        <!-- ---------- SÚPER ADMINISTRADORES ---------- -->
+        <section id="seccion-administradores" class="oculto">
+          <div class="encabezado-seccion">
+            <div>
+              <h1 class="titulo-pagina">Administradores de plataforma</h1>
+              <p class="subtitulo-pagina">
+                Cuentas con acceso a este panel. No pueden ver empleados, asistencia ni nómina de
+                ninguna empresa.
+              </p>
+            </div>
+            <button class="boton boton-primario" id="btn-nuevo-admin">Nuevo administrador</button>
+          </div>
+
+          <div class="tabla-contenedor">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Nombre</th>
+                  <th scope="col">Correo</th>
+                  <th scope="col">Último acceso</th>
+                  <th scope="col">Estado</th>
+                </tr>
+              </thead>
+              <tbody id="cuerpo-admins"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- ========== PANEL LATERAL (detalle / formularios) ========== -->
+    <div class="velo oculto" id="velo"></div>
+    <aside
+      class="panel-lateral oculto"
+      id="panel-lateral"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="lateral-titulo"
+    >
+      <div class="panel-cabecera">
+        <div>
+          <h2 class="titulo-pagina" id="lateral-titulo" style="font-size: 20px"></h2>
+          <p class="dato-secundario" id="lateral-subtitulo"></p>
+        </div>
+        <button class="cerrar" id="btn-cerrar-lateral" aria-label="Cerrar">&times;</button>
+      </div>
+      <div class="panel-cuerpo" id="lateral-cuerpo"></div>
+    </aside>
+
+    <script src="../config.js"></script>
+    <script src="js/api-plataforma.js?v=2"></script>
+    <script src="js/panel.js?v=2"></script>
+  </body>
+</html>

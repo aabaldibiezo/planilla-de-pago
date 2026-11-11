@@ -1,0 +1,25 @@
+{
+  "name": "planilla-de-pago",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Herramientas de calidad compartidas por el backend y el frontend.",
+  "scripts": {
+    "lint": "eslint backend frontend",
+    "lint:fix": "eslint backend frontend --fix",
+    "format": "prettier --write \"{backend,frontend,mobile}/**/*.{js,json,css,html,md}\"",
+    "format:check": "prettier --check \"{backend,frontend,mobile}/**/*.{js,json,css,html,md}\"",
+    "test": "npm --prefix backend test",
+    "apk": "node scripts/compilar-apk.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aabaldibiezo/planilla-de-pago.git"
+  },
+  "license": "ISC",
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.6"
+  }
+}

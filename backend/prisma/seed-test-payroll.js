@@ -1,3 +1,5 @@
+// Carga backend/.env. El CLI de Prisma lo hace solo, pero `node` directo no.
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
@@ -7,12 +9,12 @@ const TEST_DATES = ['2026-08-03', '2026-08-04', '2026-08-05', '2026-08-06', '202
 const ENTRY_OFFSETS = [0, 5, -2, 10, 0];
 const DISCOUNT_DESCRIPTION = 'Cuota de préstamo de prueba - agosto 2026';
 
-const toMinutes = time => {
+const toMinutes = (time) => {
   const [hours, minutes] = time.split(':').map(Number);
   return hours * 60 + minutes;
 };
 
-const toTime = totalMinutes => {
+const toTime = (totalMinutes) => {
   const normalized = ((totalMinutes % 1440) + 1440) % 1440;
   return `${String(Math.floor(normalized / 60)).padStart(2, '0')}:${String(normalized % 60).padStart(2, '0')}`;
 };
@@ -20,7 +22,10 @@ const toTime = totalMinutes => {
 const instantAtBoliviaTime = (date, time) => new Date(`${date}T${time}:00-04:00`);
 
 async function main() {
-  const admin = await prisma.user.findFirst({ where: { role: 'ADMIN', isActive: true }, orderBy: { id: 'asc' } });
+  const admin = await prisma.user.findFirst({
+    where: { role: 'ADMIN', isActive: true },
+    orderBy: { id: 'asc' },
+  });
   if (!admin) throw new Error('Se requiere un administrador activo para crear los datos de prueba');
 
   const employees = await prisma.user.findMany({
@@ -144,11 +149,13 @@ async function main() {
   console.log(`Empleados: ${employees.length}`);
   console.log(`Asistencias creadas: ${attendancesCreated}`);
   console.log(`Sesiones creadas: ${sessionsCreated}`);
-  console.log(`Descuento externo: Bs. ${Number(discount.amount).toFixed(2)} para ${discountEmployee.firstName} ${discountEmployee.lastName}`);
+  console.log(
+    `Descuento externo: Bs. ${Number(discount.amount).toFixed(2)} para ${discountEmployee.firstName} ${discountEmployee.lastName}`
+  );
 }
 
 main()
-  .catch(error => {
+  .catch((error) => {
     console.error(error);
     process.exitCode = 1;
   })

@@ -1,5 +1,7 @@
 const { validationResult } = require('express-validator');
 const authService = require('../services/auth.service');
+const userService = require('../services/user.service');
+const auditService = require('../services/audit.service');
 
 const login = async (req, res, next) => {
   try {
@@ -29,4 +31,61 @@ const getProfile = async (req, res, next) => {
   }
 };
 
-module.exports = { login, getProfile };
+const updateProfile = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, error: errors.array()[0].msg });
+    }
+
+    const user = await authService.updateOwnProfile(req.user.id, req.body);
+    await auditService.record(req, {
+      action: 'UPDATE_PROFILE',
+      entity: 'User',
+      entityId: user.id,
+      employeeId: user.id,
+      newData: user,
+    });
+
+    res.json({ success: true, data: user });
+  } catch (error) {
+    if (error.message.includes('No se enviaron datos')) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+    next(error);
+  }
+};
+
+const changePassword = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, error: errors.array()[0].msg });
+    }
+
+    const { currentPassword, newPassword } = req.body;
+    const user = await userService.changeOwnPassword(req.user.id, currentPassword, newPassword);
+
+    // Nunca se registra ninguna de las dos contraseñas en la auditoría.
+    await auditService.record(req, {
+      action: 'CHANGE_PASSWORD',
+      entity: 'User',
+      entityId: user.id,
+      employeeId: user.id,
+    });
+
+    res.json({ success: true, data: { message: 'Contraseña actualizada correctamente' } });
+  } catch (error) {
+    if (
+      error.message.includes('contraseña actual') ||
+      error.message.includes('debe tener') ||
+      error.message.includes('debe combinar') ||
+      error.message.includes('distinta')
+    ) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+    next(error);
+  }
+};
+
+module.exports = { login, getProfile, updateProfile, changePassword };

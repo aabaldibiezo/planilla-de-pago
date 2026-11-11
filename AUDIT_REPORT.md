@@ -1,5 +1,12 @@
 # Informe técnico de preparación para producción
 
+> **Documento histórico.** Refleja el estado previo al modelo multiempresa. Lo
+> que dice sigue siendo válido para las áreas que describe, pero quedó atrás en
+> dos puntos: las pruebas pasaron de 5 a 73, y la boleta ya no se envía por
+> correo (se descarga desde el panel y la aplicación). El estado actual del
+> aislamiento entre empresas, los planes y las suscripciones está en
+> [MULTIEMPRESA.md](MULTIEMPRESA.md).
+
 ## Inventario y estado
 
 | Área | Estado | Decisión |

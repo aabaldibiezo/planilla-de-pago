@@ -1,141 +1,186 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Planilla de Pago - Sistema de Control de Horas y Nómina">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Planilla de Pago - Sistema de Control de Horas y Nómina" />
     <title>Planilla de Pago</title>
 
     <!-- Google Fonts: Inter -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Leaflet autoalojado: la CSP solo permite scripts propios -->
+    <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
 
     <!-- Stylesheet -->
-    <link rel="stylesheet" href="css/styles.css?v=8">
-</head>
-<body>
-
+    <link rel="stylesheet" href="css/styles.css?v=34" />
+  </head>
+  <body>
     <!-- ========== LOGIN SCREEN ========== -->
     <div id="app-login">
-        <div class="login-bg-animation"></div>
-        <div class="login-card">
-            <div class="login-logo">
-                <span class="login-logo-icon">💼</span>
-                <h1 class="login-title">Planilla de Pago</h1>
-                <p class="login-subtitle">Sistema de Control de Horas</p>
-            </div>
-            <form id="login-form" autocomplete="off">
-                <div class="form-group">
-                    <label for="login-email">Correo Electrónico</label>
-                    <input 
-                        type="email" 
-                        id="login-email" 
-                        placeholder="ejemplo@empresa.com" 
-                        required 
-                        autocomplete="email"
-                    >
-                </div>
-                <div class="form-group">
-                    <label for="login-password">Contraseña</label>
-                    <input 
-                        type="password" 
-                        id="login-password" 
-                        placeholder="••••••••" 
-                        required 
-                        autocomplete="current-password"
-                    >
-                </div>
-                <div id="login-error" class="login-error hidden"></div>
-                <button type="submit" id="login-btn" class="btn-primary btn-login">
-                    Iniciar Sesión
-                </button>
-            </form>
+      <div class="login-bg-animation"></div>
+      <div class="login-card">
+        <div class="login-logo">
+          <span class="login-logo-icon">💼</span>
+          <h1 class="login-title">Planilla de Pago</h1>
+          <p class="login-subtitle">Sistema de Control de Horas</p>
         </div>
+        <form id="login-form" autocomplete="off">
+          <div class="form-group">
+            <label for="login-email">Correo o celular</label>
+            <input
+              type="text"
+              id="login-email"
+              placeholder="ejemplo@empresa.com o 71234567"
+              required
+              autocomplete="username"
+            />
+          </div>
+          <div class="form-group">
+            <label for="login-password">Contraseña</label>
+            <input
+              type="password"
+              id="login-password"
+              placeholder="••••••••"
+              required
+              autocomplete="current-password"
+            />
+          </div>
+          <div id="login-error" class="login-error hidden"></div>
+          <button type="submit" id="login-btn" class="btn-primary btn-login">Iniciar Sesión</button>
+        </form>
+      </div>
     </div>
 
     <!-- ========== MAIN APPLICATION ========== -->
     <div id="app-main" class="hidden">
+      <header class="mobile-header" aria-label="Barra de navegación móvil">
+        <button
+          class="mobile-menu-toggle"
+          id="mobile-menu-toggle"
+          type="button"
+          aria-label="Abrir menú"
+          aria-controls="sidebar"
+          aria-expanded="false"
+        >
+          ☰
+        </button>
+        <span class="mobile-header-title">Planilla de Pago</span>
+      </header>
 
-        <header class="mobile-header" aria-label="Barra de navegación móvil">
-            <button
-                class="mobile-menu-toggle"
-                id="mobile-menu-toggle"
-                type="button"
-                aria-label="Abrir menú"
-                aria-controls="sidebar"
-                aria-expanded="false"
-            >☰</button>
-            <span class="mobile-header-title">Planilla de Pago</span>
-        </header>
+      <!-- Sidebar -->
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+          <span class="sidebar-logo-icon">💼</span>
+          <div class="sidebar-brand">
+            <h2 class="sidebar-title">Planilla de Pago</h2>
+            <span class="sidebar-version">v1.0</span>
+          </div>
+          <button class="sidebar-toggle" id="sidebar-close" type="button" aria-label="Cerrar menú">
+            ×
+          </button>
+        </div>
 
-        <!-- Sidebar -->
-        <aside class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <span class="sidebar-logo-icon">💼</span>
-                <div class="sidebar-brand">
-                    <h2 class="sidebar-title">Planilla de Pago</h2>
-                    <span class="sidebar-version">v1.0</span>
-                </div>
-                <button class="sidebar-toggle" id="sidebar-close" type="button" aria-label="Cerrar menú">×</button>
-            </div>
+        <!--
+          Navegación agrupada por categoría. Antes eran siete enlaces sueltos al
+          mismo nivel: el usuario tenía que leerlos todos para encontrar uno.
+        -->
+        <nav class="sidebar-nav">
+          <a href="#" class="nav-link active" data-page="dashboard" id="nav-dashboard">
+            <span class="nav-icon">📊</span>
+            <span class="nav-text">Inicio</span>
+          </a>
 
-            <nav class="sidebar-nav">
-                <a href="#" class="nav-link active" data-page="dashboard" id="nav-dashboard">
-                    <span class="nav-icon">📊</span>
-                    <span class="nav-text">Dashboard</span>
-                </a>
-                <a href="#" class="nav-link admin-only" data-page="attendance" id="nav-attendance">
-                    <span class="nav-icon">⏰</span>
-                    <span class="nav-text">Asistencia</span>
-                </a>
-                <a href="#" class="nav-link admin-only" data-page="employees" id="nav-employees">
-                    <span class="nav-icon">👥</span>
-                    <span class="nav-text">Empleados</span>
-                </a>
-                <a href="#" class="nav-link admin-only" data-page="payments" id="nav-payments">
-                    <span class="nav-icon">💰</span>
-                    <span class="nav-text">Cálculo de Nómina</span>
-                </a>
-                <a href="#" class="nav-link admin-only" data-page="workforce" id="nav-workforce">
-                    <span class="nav-icon">⚙</span>
-                    <span class="nav-text">Gestión laboral</span>
-                </a>
-                <a href="#" class="nav-link admin-only" data-page="history" id="nav-history">
-                    <span class="nav-icon">📜</span>
-                    <span class="nav-text">Historial de Pagos</span>
-                </a>
-            </nav>
+          <div class="nav-grupo admin-only">
+            <span class="nav-grupo-titulo">Personal</span>
+            <a href="#" class="nav-link" data-page="employees" id="nav-employees">
+              <span class="nav-icon">👥</span>
+              <span class="nav-text">Empleados</span>
+            </a>
+            <a href="#" class="nav-link" data-page="attendance" id="nav-attendance">
+              <span class="nav-icon">⏰</span>
+              <span class="nav-text">Asistencia</span>
+            </a>
+            <a href="#" class="nav-link" data-page="worksites" id="nav-worksites">
+              <span class="nav-icon">📍</span>
+              <span class="nav-text">Sedes</span>
+            </a>
+            <a href="#" class="nav-link" data-page="clients" id="nav-clients">
+              <span class="nav-icon">🏢</span>
+              <span class="nav-text">Clientes y contratos</span>
+            </a>
+          </div>
 
-            <div class="sidebar-user">
-                <div class="user-avatar" id="user-avatar">--</div>
-                <div class="user-info">
-                    <span class="user-name" id="user-name">Usuario</span>
-                    <span class="user-role badge-info" id="user-role">Rol</span>
-                </div>
-                <button class="btn-logout" id="btn-logout" title="Cerrar Sesión">
-                    🚪
-                </button>
-            </div>
-        </aside>
+          <div class="nav-grupo admin-only">
+            <span class="nav-grupo-titulo">Pagos</span>
+            <a href="#" class="nav-link" data-page="payments" id="nav-payments">
+              <span class="nav-icon">💰</span>
+              <span class="nav-text">Calcular nómina</span>
+            </a>
+            <a href="#" class="nav-link" data-page="workforce" id="nav-workforce">
+              <span class="nav-icon">⚙</span>
+              <span class="nav-text">Horas extra y descuentos</span>
+            </a>
+          </div>
 
-        <button class="sidebar-backdrop" id="sidebar-backdrop" type="button" aria-label="Cerrar menú"></button>
+          <div class="nav-grupo admin-only">
+            <span class="nav-grupo-titulo">Reportes</span>
+            <a href="#" class="nav-link" data-page="statement" id="nav-statement">
+              <span class="nav-icon">📊</span>
+              <span class="nav-text">Estado de resultados</span>
+            </a>
+            <a href="#" class="nav-link" data-page="history" id="nav-history">
+              <span class="nav-icon">📜</span>
+              <span class="nav-text">Historial de pagos</span>
+            </a>
+          </div>
 
-        <!-- Main Content -->
-        <main class="content" id="main-content">
-            <div id="page-content"></div>
-        </main>
+          <div class="nav-grupo">
+            <span class="nav-grupo-titulo">Mi cuenta</span>
+            <a href="#" class="nav-link" data-page="password" id="nav-password">
+              <span class="nav-icon">🔒</span>
+              <span class="nav-text">Mi contraseña</span>
+            </a>
+          </div>
+        </nav>
+
+        <div class="sidebar-user">
+          <div class="user-avatar" id="user-avatar">--</div>
+          <div class="user-info">
+            <span class="user-name" id="user-name">Usuario</span>
+            <span class="user-role badge-info" id="user-role">Rol</span>
+          </div>
+          <button class="btn-logout" id="btn-logout" title="Cerrar Sesión">🚪</button>
+        </div>
+      </aside>
+
+      <button
+        class="sidebar-backdrop"
+        id="sidebar-backdrop"
+        type="button"
+        aria-label="Cerrar menú"
+      ></button>
+
+      <!-- Main Content -->
+      <main class="content" id="main-content">
+        <div id="page-content"></div>
+      </main>
     </div>
 
     <!-- ========== MODAL OVERLAY ========== -->
     <div id="modal-overlay" class="modal-overlay hidden">
-        <div class="modal-card">
-            <div class="modal-header">
-                <h3 class="modal-title" id="modal-title">Modal</h3>
-                <button class="modal-close" id="modal-close" aria-label="Cerrar">&times;</button>
-            </div>
-            <div class="modal-body" id="modal-body"></div>
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 class="modal-title" id="modal-title">Modal</h3>
+          <button class="modal-close" id="modal-close" aria-label="Cerrar">&times;</button>
         </div>
+        <div class="modal-body" id="modal-body"></div>
+      </div>
     </div>
 
     <!-- ========== TOAST CONTAINER ========== -->
@@ -143,16 +188,23 @@
 
     <!-- ========== SCRIPTS ========== -->
     <script src="config.js"></script>
-    <script src="js/components.js?v=8"></script>
-    <script src="js/api.js?v=8"></script>
-    <script src="js/auth.js?v=8"></script>
-    <script src="js/pages/dashboard.js?v=8"></script>
-    <script src="js/pages/attendance.js?v=8"></script>
-    <script src="js/pages/employees.js?v=8"></script>
-    <script src="js/pages/payments.js?v=8"></script>
-    <script src="js/pages/history.js?v=8"></script>
-    <script src="js/pages/workforce.js?v=1"></script>
-    <script src="js/app.js?v=8"></script>
-
-</body>
+    <script src="vendor/leaflet/leaflet.js"></script>
+    <script src="js/components.js?v=25"></script>
+    <script src="js/api.js?v=25"></script>
+    <script src="js/auth.js?v=25"></script>
+    <script src="js/receipt.js?v=25"></script>
+    <script src="js/audit-text.js?v=31"></script>
+    <script src="js/collections-reminder.js?v=25"></script>
+    <script src="js/pages/dashboard.js?v=25"></script>
+    <script src="js/pages/attendance.js?v=28"></script>
+    <script src="js/pages/employees.js?v=25"></script>
+    <script src="js/pages/worksites.js?v=29"></script>
+    <script src="js/pages/clients.js?v=25"></script>
+    <script src="js/pages/statement.js?v=36"></script>
+    <script src="js/pages/payments.js?v=25"></script>
+    <script src="js/pages/history.js?v=33"></script>
+    <script src="js/pages/workforce.js?v=32"></script>
+    <script src="js/pages/password.js?v=25"></script>
+    <script src="js/app.js?v=25"></script>
+  </body>
 </html>

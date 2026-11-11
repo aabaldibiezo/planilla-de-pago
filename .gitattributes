@@ -1,0 +1,13 @@
+# Prettier normaliza los saltos de línea a LF (endOfLine: "lf").
+# Sin esta configuración, Git en Windows convierte a CRLF y `format:check`
+# falla en unas máquinas y pasa en otras.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary

@@ -1,0 +1,8 @@
+# Librerías de terceros autoalojadas: se copian tal cual desde npm.
+frontend/public/vendor/
+
+# Artefactos generados
+frontend/dist/
+backend/receipts/
+backend/uploads/
+**/node_modules/

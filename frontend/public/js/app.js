@@ -28,13 +28,13 @@ class Application {
 
     setupNavigation() {
         const navLinks = document.querySelectorAll('.sidebar-nav .nav-link');
-        navLinks.forEach(link => {
+        navLinks.forEach((link) => {
             link.addEventListener('click', (e) => {
                 e.preventDefault();
                 const page = link.getAttribute('data-page');
-                
+
                 // Deseleccionar el resto y marcar el actual
-                navLinks.forEach(l => l.classList.remove('active'));
+                navLinks.forEach((l) => l.classList.remove('active'));
                 link.classList.add('active');
 
                 this.navigateTo(page);
@@ -89,11 +89,21 @@ class Application {
         const pageContent = document.getElementById('page-content');
         if (!pageContent) return;
 
+        // Mientras exista una contraseña temporal pendiente, el backend rechaza
+        // toda ruta de negocio: se fuerza el cambio antes que cualquier otra vista.
+        if (window.auth?.requiresPasswordChange() && page !== 'password') {
+            page = 'password';
+        }
+
         this.currentPage = page;
+
+        // Recordatorio de cobros: se actualiza en cada cambio de pantalla, sin
+        // bloquear la navegación (no se espera la respuesta).
+        if (page !== 'password') window.Cobros?.refrescar();
 
         // Actualizar links activos (por si se navega programáticamente)
         const navLinks = document.querySelectorAll('.sidebar-nav .nav-link');
-        navLinks.forEach(link => {
+        navLinks.forEach((link) => {
             if (link.getAttribute('data-page') === page) {
                 link.classList.add('active');
             } else {
@@ -154,6 +164,30 @@ class Application {
                 }
                 pageModule = window.WorkforcePage;
                 break;
+            case 'worksites':
+                if (window.auth && !window.auth.isAdmin()) {
+                    this.navigateTo('dashboard');
+                    return;
+                }
+                pageModule = window.WorksitesPage;
+                break;
+            case 'clients':
+                if (window.auth && !window.auth.isAdmin()) {
+                    this.navigateTo('dashboard');
+                    return;
+                }
+                pageModule = window.ClientsPage;
+                break;
+            case 'statement':
+                if (window.auth && !window.auth.isAdmin()) {
+                    this.navigateTo('dashboard');
+                    return;
+                }
+                pageModule = window.StatementPage;
+                break;
+            case 'password':
+                pageModule = window.PasswordPage;
+                break;
             default:
                 this.navigateTo('dashboard');
                 return;
@@ -196,7 +230,7 @@ class Application {
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
-            
+
             const email = document.getElementById('login-email').value.trim();
             const password = document.getElementById('login-password').value;
 
@@ -281,12 +315,12 @@ class Application {
 
         const toast = document.createElement('div');
         toast.className = `toast toast-${type}`;
-        
+
         const icons = {
-            'success': '✅',
-            'error': '❌',
-            'info': 'ℹ️',
-            'warning': '⚠️'
+            success: '✅',
+            error: '❌',
+            info: 'ℹ️',
+            warning: '⚠️',
         };
 
         const icon = document.createElement('span');
@@ -316,8 +350,11 @@ class Application {
         return new Intl.NumberFormat('es-BO', {
             style: 'currency',
             currency: 'BOB',
-            minimumFractionDigits: 2
-        }).format(amount).replace('BOB', 'Bs.').trim();
+            minimumFractionDigits: 2,
+        })
+            .format(amount)
+            .replace('BOB', 'Bs.')
+            .trim();
     }
 
     formatDate(dateString) {

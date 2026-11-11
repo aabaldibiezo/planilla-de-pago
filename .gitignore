@@ -3,8 +3,26 @@
 **/.env.local
 **/node_modules/
 frontend/dist/
+
+# Datos personales generados en tiempo de ejecución. NO deben versionarse:
+# las boletas llevan sueldos con nombre y apellido, y las fotos de marcaje son
+# imágenes de personas identificables. En producción viven en Cloudinary; en
+# local quedan en disco solo mientras se prueba.
 backend/receipts/
+backend/uploads/
+
 *.log
 .DS_Store
 .vscode/
 .idea/
+
+
+# Flutter (app móvil)
+movil/build/
+movil/.dart_tool/
+movil/android/.gradle/
+movil/android/local.properties
+
+# APK compilados: pesan ~50 MB cada uno y la dirección del servidor queda
+# fijada adentro. Se generan con `npm run apk`; solo se versiona el README.
+apk/*.apk

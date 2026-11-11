@@ -5,19 +5,13 @@ window.AttendancePage = {
     filters: {
         userId: '',
         month: new Date().getMonth() + 1,
-        year: new Date().getFullYear()
+        year: new Date().getFullYear(),
     },
     users: [],
     entries: [],
 
     escapeHtml(value) {
-        return String(value || '').replace(/[&<>"']/g, character => ({
-            '&': '&amp;',
-            '<': '&lt;',
-            '>': '&gt;',
-            '"': '&quot;',
-            "'": '&#039;'
-        })[character]);
+        return window.UI.escapeHtml(value);
     },
 
     async render() {
@@ -27,9 +21,12 @@ window.AttendancePage = {
                     <h1 class="page-title">📅 Control de Asistencia</h1>
                     <p class="page-subtitle">Registra la hora de ingreso y salida real de los empleados y calcula automáticamente las horas trabajadas y minutos de retraso.</p>
                 </div>
-                <button class="btn-primary" id="btn-new-attendance">
-                    ➕ Registrar Entrada
-                </button>
+                <div class="flex gap-2 flex-wrap">
+                    <button class="btn-secondary" id="btn-worked-day">🧹 Registrar día de temporal</button>
+                    <button class="btn-primary" id="btn-new-attendance">
+                        ➕ Registrar Entrada
+                    </button>
+                </div>
             </div>
 
             <!-- Resumen rápido mensual -->
@@ -122,6 +119,101 @@ window.AttendancePage = {
         `;
     },
 
+    /**
+     * Día trabajado de un temporal: el encargado carga entrada y salida
+     * juntas, el mismo día o después. El temporal no usa la aplicación.
+     */
+    async openWorkedDayModal() {
+        const temporales = this.users.filter((u) => u.employeeType === 'TEMPORAL');
+        if (!temporales.length) {
+            window.App.showToast('No hay temporales. Regístrelos en Empleados → Nuevo empleado → Temporal.', 'warning');
+            return;
+        }
+
+        // El día se carga siempre con la sede donde trabajó: sin sede no se
+        // sabe a qué lugar ni a qué cliente corresponde.
+        let sedes = [];
+        try {
+            sedes = ((await window.api.getWorksites()).data || []).filter((s) => s.isActive !== false);
+        } catch {
+            sedes = [];
+        }
+        if (!sedes.length) {
+            window.App.showToast(
+                'Primero cree la sede donde trabajan, en Sedes → Nueva sede.',
+                'warning'
+            );
+            return;
+        }
+        const hoy = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+        window.App.showModal(
+            'Registrar día de temporal',
+            `
+            <form id="worked-day-form" class="mt-2">
+                <div class="form-group">
+                    <label for="wd-user">Persona</label>
+                    <select id="wd-user" class="form-control" required>
+                        <option value="">Seleccione…</option>
+                        ${temporales
+                            .map(
+                                (u) =>
+                                    `<option value="${u.id}">${this.escapeHtml(`${u.firstName} ${u.lastName}`)} · ${window.App.formatCurrency(parseFloat(u.dailyWage) || 0)} por día</option>`
+                            )
+                            .join('')}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="wd-sede">Sede donde trabajó</label>
+                    <select id="wd-sede" class="form-control" required>
+                        <option value="">Seleccione…</option>
+                        ${sedes
+                            .map((s) => `<option value="${s.id}">${this.escapeHtml(s.name)}</option>`)
+                            .join('')}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="wd-date">Día que trabajó</label>
+                    <input type="date" id="wd-date" class="form-control" required value="${hoy}" max="${hoy}">
+                </div>
+                <div class="flex gap-2">
+                    <div class="form-group flex-1">
+                        <label for="wd-start">Entrada</label>
+                        <input type="time" id="wd-start" class="form-control" required value="06:00">
+                    </div>
+                    <div class="form-group flex-1">
+                        <label for="wd-end">Salida</label>
+                        <input type="time" id="wd-end" class="form-control" required value="14:00">
+                    </div>
+                </div>
+                <div class="flex-end gap-2 mt-3">
+                    <button type="button" class="btn-secondary" id="wd-cancel">Cancelar</button>
+                    <button type="submit" class="btn-primary">Registrar día</button>
+                </div>
+            </form>
+        `
+        );
+
+        document.getElementById('wd-cancel').addEventListener('click', () => window.App.hideModal());
+        document.getElementById('worked-day-form').addEventListener('submit', async (evento) => {
+            evento.preventDefault();
+            try {
+                await window.api.post('/attendance/sessions/worked-day', {
+                    userId: Number(document.getElementById('wd-user').value),
+                    worksiteId: Number(document.getElementById('wd-sede').value),
+                    date: document.getElementById('wd-date').value,
+                    startTime: document.getElementById('wd-start').value,
+                    endTime: document.getElementById('wd-end').value,
+                });
+                window.App.hideModal();
+                window.App.showToast('Día registrado. Ya figura en la planilla del mes.', 'success');
+                await this.loadEntries();
+            } catch (error) {
+                window.App.showToast(error.message, 'error');
+            }
+        });
+    },
+
     async init() {
         // Set default month select value
         document.getElementById('filter-month').value = this.filters.month;
@@ -130,19 +222,30 @@ window.AttendancePage = {
         // Load employees list
         try {
             const res = await window.api.getUsers();
-            this.users = (res.data || []).filter(u => u.isActive && u.role !== 'ADMIN');
+            this.users = (res.data || []).filter((u) => u.isActive && u.role !== 'ADMIN');
             const selectUser = document.getElementById('filter-user');
             if (selectUser) {
-                selectUser.innerHTML = '<option value="">Todos los Empleados</option>' + 
-                    this.users.map(u => `<option value="${u.id}">${u.firstName} ${u.lastName}</option>`).join('');
+                selectUser.innerHTML =
+                    '<option value="">Todos los Empleados</option>' +
+                    this.users
+                        .map(
+                            (u) =>
+                                `<option value="${u.id}">${this.escapeHtml(`${u.firstName} ${u.lastName}`)}</option>`
+                        )
+                        .join('');
             }
         } catch (e) {
             console.error('Error al cargar empleados:', e);
         }
 
         // Add events
-        document.getElementById('btn-new-attendance').addEventListener('click', () => this.openAttendanceModal());
-        
+        document
+            .getElementById('btn-new-attendance')
+            .addEventListener('click', () => this.openAttendanceModal());
+        document
+            .getElementById('btn-worked-day')
+            .addEventListener('click', () => this.openWorkedDayModal());
+
         document.getElementById('btn-apply-filters').addEventListener('click', () => {
             this.filters.userId = document.getElementById('filter-user').value;
             this.filters.month = document.getElementById('filter-month').value;
@@ -155,11 +258,11 @@ window.AttendancePage = {
             this.filters.userId = '';
             this.filters.month = now.getMonth() + 1;
             this.filters.year = now.getFullYear();
-            
+
             document.getElementById('filter-user').value = '';
             document.getElementById('filter-month').value = this.filters.month;
             document.getElementById('filter-year').value = this.filters.year;
-            
+
             this.loadEntries();
         });
 
@@ -167,7 +270,7 @@ window.AttendancePage = {
             const button = event.target.closest('[data-attendance-action]');
             if (!button) return;
 
-            const entry = this.entries.find(item => item.id === Number(button.dataset.entryId));
+            const entry = this.entries.find((item) => item.id === Number(button.dataset.entryId));
             if (!entry) return;
 
             const empName = entry.user
@@ -212,92 +315,119 @@ window.AttendancePage = {
                 return;
             }
 
-            tbody.innerHTML = entries.map(entry => {
-                const empName = entry.user ? `${entry.user.firstName} ${entry.user.lastName}` : 'Desconocido';
-                const delay = parseInt(entry.delayMinutes) || 0;
-                const hours = parseFloat(entry.hoursWorked) || 0;
-                const delayedSessions = (entry.sessions || []).filter(session => Number(session.delayMinutes) > 0);
-                const openSession = (entry.sessions || []).find(session => !session.clockOut);
-                const justifiedSessions = delayedSessions.filter(session => session.justificationStatus === 'JUSTIFIED');
-                const justifiedMinutes = justifiedSessions.reduce((total, session) => total + Number(session.delayMinutes || 0), 0);
-                const pendingDelay = Math.max(0, delay - justifiedMinutes);
-                
-                let delayClass = 'text-success';
-                let delayText = 'A tiempo';
-                
-                if (pendingDelay > 0) {
-                    delayClass = 'text-danger font-weight-semibold';
-                    delayText = `${pendingDelay} min`;
-                } else if (delay > 0) {
-                    delayText = '';
-                }
+            tbody.innerHTML = entries
+                .map((entry) => {
+                    const empName = entry.user
+                        ? `${entry.user.firstName} ${entry.user.lastName}`
+                        : 'Desconocido';
+                    const delay = parseInt(entry.delayMinutes) || 0;
+                    const hours = parseFloat(entry.hoursWorked) || 0;
+                    const delayedSessions = (entry.sessions || []).filter(
+                        (session) => Number(session.delayMinutes) > 0
+                    );
+                    const openSession = (entry.sessions || []).find((session) => !session.clockOut);
+                    const justifiedSessions = delayedSessions.filter(
+                        (session) => session.justificationStatus === 'JUSTIFIED'
+                    );
+                    const justifiedMinutes = justifiedSessions.reduce(
+                        (total, session) => total + Number(session.delayMinutes || 0),
+                        0
+                    );
+                    const pendingDelay = Math.max(0, delay - justifiedMinutes);
 
-                let delayStatus = '';
-                let justifyDelayBtn = '';
-                if (delay > 0 && delayedSessions.length > 0) {
-                    const allJustified = delayedSessions.every(session => session.justificationStatus === 'JUSTIFIED');
-                    const allRejected = delayedSessions.every(session => session.justificationStatus === 'REJECTED');
-                    const reviewers = [...new Set(justifiedSessions
-                        .map(session => session.justificationReviewedByUser)
-                        .filter(Boolean)
-                        .map(user => `${user.firstName} ${user.lastName}`))];
-                    const reasons = [...new Set(justifiedSessions
-                        .map(session => session.justificationReason)
-                        .filter(Boolean))];
-                    const notes = [...new Set(justifiedSessions
-                        .map(session => session.justificationNotes)
-                        .filter(Boolean))];
-                    const justificationDetail = `
-                        ${reasons.map(reason => `<small class="delay-justification"><strong>Motivo:</strong> ${this.escapeHtml(reason)}</small>`).join('')}
-                        ${notes.map(note => `<small class="delay-justification"><strong>Observación:</strong> ${this.escapeHtml(note)}</small>`).join('')}
-                        ${reviewers.length ? `<small class="delay-reviewer">Perdonado por ${reviewers.map(name => this.escapeHtml(name)).join(', ')}</small>` : ''}
+                    let delayClass = 'text-success';
+                    let delayText = 'A tiempo';
+
+                    if (pendingDelay > 0) {
+                        delayClass = 'text-danger font-weight-semibold';
+                        delayText = `${pendingDelay} min`;
+                    } else if (delay > 0) {
+                        delayText = '';
+                    }
+
+                    let delayStatus = '';
+                    let justifyDelayBtn = '';
+                    if (delay > 0 && delayedSessions.length > 0) {
+                        const allJustified = delayedSessions.every(
+                            (session) => session.justificationStatus === 'JUSTIFIED'
+                        );
+                        const allRejected = delayedSessions.every(
+                            (session) => session.justificationStatus === 'REJECTED'
+                        );
+                        const reviewers = [
+                            ...new Set(
+                                justifiedSessions
+                                    .map((session) => session.justificationReviewedByUser)
+                                    .filter(Boolean)
+                                    .map((user) => `${user.firstName} ${user.lastName}`)
+                            ),
+                        ];
+                        const reasons = [
+                            ...new Set(
+                                justifiedSessions
+                                    .map((session) => session.justificationReason)
+                                    .filter(Boolean)
+                            ),
+                        ];
+                        const notes = [
+                            ...new Set(
+                                justifiedSessions
+                                    .map((session) => session.justificationNotes)
+                                    .filter(Boolean)
+                            ),
+                        ];
+                        const justificationDetail = `
+                        ${reasons.map((reason) => `<small class="delay-justification"><strong>Motivo:</strong> ${this.escapeHtml(reason)}</small>`).join('')}
+                        ${notes.map((note) => `<small class="delay-justification"><strong>Observación:</strong> ${this.escapeHtml(note)}</small>`).join('')}
+                        ${reviewers.length ? `<small class="delay-reviewer">Perdonado por ${reviewers.map((name) => this.escapeHtml(name)).join(', ')}</small>` : ''}
                     `;
 
-                    if (allJustified) {
-                        delayStatus = `
+                        if (allJustified) {
+                            delayStatus = `
                             <span class="badge badge-success">Justificado</span>
                             ${justificationDetail}
                         `;
-                    } else if (allRejected) {
-                        delayStatus = '<span class="badge badge-danger">No justificado</span>';
-                    } else {
-                        delayStatus = `
+                        } else if (allRejected) {
+                            delayStatus = '<span class="badge badge-danger">No justificado</span>';
+                        } else {
+                            delayStatus = `
                             ${justifiedMinutes > 0 ? `<span class="badge badge-success">${justifiedMinutes} min justificados</span>${justificationDetail}` : ''}
                             ${pendingDelay > 0 ? '<span class="badge badge-warning">Pendiente</span>' : ''}
                         `;
-                    }
+                        }
 
-                    justifyDelayBtn = `
+                        justifyDelayBtn = `
                         <button class="btn-secondary btn-sm"
                             data-attendance-action="justify-delay"
                             data-entry-id="${entry.id}"
                             title="Justificar los ${delay} minutos de retraso"
-                            aria-label="Justificar retraso de ${empName}">${allJustified ? '✏️ Editar justificación' : '✅ Justificar'}</button>
+                            aria-label="Justificar retraso de ${this.escapeHtml(empName)}">${allJustified ? '✏️ Editar justificación' : '✅ Justificar'}</button>
                     `;
-                }
+                    }
 
-                const exitText = openSession
-                    ? '<span class="badge badge-warning">En curso</span>'
-                    : entry.actualExit 
-                    ? `<span class="badge badge-secondary">${entry.actualExit}</span>` 
-                    : '<span class="text-muted">—</span>';
+                    const exitText = openSession
+                        ? '<span class="badge badge-warning">En curso</span>'
+                        : entry.actualExit
+                          ? `<span class="badge badge-secondary">${this.escapeHtml(entry.actualExit)}</span>`
+                          : '<span class="text-muted">—</span>';
 
-                const hoursText = !openSession && entry.actualExit
-                    ? `<span class="font-weight-semibold">${hours.toFixed(2)} hrs</span>`
-                    : `<span class="text-muted">${hours.toFixed(2)} hrs acumuladas</span>`;
+                    const hoursText =
+                        !openSession && entry.actualExit
+                            ? `<span class="font-weight-semibold">${hours.toFixed(2)} hrs</span>`
+                            : `<span class="text-muted">${hours.toFixed(2)} hrs acumuladas</span>`;
 
-                // Clock out action button only if still clocked in
-                let clockOutBtn = '';
-                if (openSession) {
-                    clockOutBtn = `<button class="btn-success btn-sm" data-attendance-action="clock-out" data-entry-id="${entry.id}" data-session-id="${openSession.id}" title="Marcar Salida">🚪 Salida</button>`;
-                }
+                    // Clock out action button only if still clocked in
+                    let clockOutBtn = '';
+                    if (openSession) {
+                        clockOutBtn = `<button class="btn-success btn-sm" data-attendance-action="clock-out" data-entry-id="${entry.id}" data-session-id="${openSession.id}" title="Marcar Salida">🚪 Salida</button>`;
+                    }
 
-                return `
+                    return `
                     <tr id="attendance-row-${entry.id}">
-                        <td class="font-weight-medium">${empName}</td>
+                        <td class="font-weight-medium">${this.escapeHtml(empName)}</td>
                         <td>${window.App.formatDate(entry.date)}</td>
-                        <td><span class="badge badge-info">${entry.scheduledEntry}</span></td>
-                        <td><span class="badge badge-secondary">${entry.actualEntry}</span></td>
+                        <td><span class="badge badge-info">${this.escapeHtml(entry.scheduledEntry)}</span></td>
+                        <td><span class="badge badge-secondary">${this.escapeHtml(entry.actualEntry)}</span></td>
                         <td>${exitText}</td>
                         <td>${hoursText}</td>
                         <td>
@@ -307,7 +437,7 @@ window.AttendancePage = {
                                 ${justifyDelayBtn}
                             </div>
                         </td>
-                        <td class="text-muted text-sm">${entry.notes || '-'}</td>
+                        <td class="text-muted text-sm">${this.escapeHtml(entry.notes || '-')}</td>
                         <td class="text-right">
                             <div class="flex-end gap-1">
                                 ${clockOutBtn}
@@ -316,7 +446,8 @@ window.AttendancePage = {
                         </td>
                     </tr>
                 `;
-            }).join('');
+                })
+                .join('');
         } catch (e) {
             console.error('Error al cargar asistencia:', e);
             tbody.innerHTML = `
@@ -333,11 +464,14 @@ window.AttendancePage = {
         const totalEntries = entries.length;
         const totalDelayMinutes = entries.reduce((sum, entry) => {
             const justifiedMinutes = (entry.sessions || [])
-                .filter(session => session.justificationStatus === 'JUSTIFIED')
+                .filter((session) => session.justificationStatus === 'JUSTIFIED')
                 .reduce((total, session) => total + Number(session.delayMinutes || 0), 0);
             return sum + Math.max(0, (parseInt(entry.delayMinutes) || 0) - justifiedMinutes);
         }, 0);
-        const totalHoursWorked = entries.reduce((sum, e) => sum + (parseFloat(e.hoursWorked) || 0), 0);
+        const totalHoursWorked = entries.reduce(
+            (sum, e) => sum + (parseFloat(e.hoursWorked) || 0),
+            0
+        );
 
         const elEntries = document.getElementById('summary-total-entries');
         const elDelays = document.getElementById('summary-total-delays');
@@ -349,24 +483,29 @@ window.AttendancePage = {
     },
 
     openJustificationModal(entry) {
-        const delayedSessions = (entry.sessions || []).filter(session => Number(session.delayMinutes) > 0);
+        const delayedSessions = (entry.sessions || []).filter(
+            (session) => Number(session.delayMinutes) > 0
+        );
         if (delayedSessions.length === 0) {
-            window.App.showToast('Este registro no tiene minutos de retraso para justificar.', 'warning');
+            window.App.showToast(
+                'Este registro no tiene minutos de retraso para justificar.',
+                'warning'
+            );
             return;
         }
 
         const employeeName = entry.user
             ? `${entry.user.firstName} ${entry.user.lastName}`
             : 'Empleado';
-        const totalDelay = delayedSessions.reduce((total, session) => total + Number(session.delayMinutes || 0), 0);
-        const previous = delayedSessions.find(session => session.justificationReason || session.justificationNotes) || delayedSessions[0];
-        const escapeHtml = value => String(value || '').replace(/[&<>"']/g, character => ({
-            '&': '&amp;',
-            '<': '&lt;',
-            '>': '&gt;',
-            '"': '&quot;',
-            "'": '&#039;'
-        })[character]);
+        const totalDelay = delayedSessions.reduce(
+            (total, session) => total + Number(session.delayMinutes || 0),
+            0
+        );
+        const previous =
+            delayedSessions.find(
+                (session) => session.justificationReason || session.justificationNotes
+            ) || delayedSessions[0];
+        const escapeHtml = window.UI.escapeHtml;
 
         const reviewer = previous.justificationReviewedByUser;
         const reviewerText = reviewer
@@ -404,54 +543,71 @@ window.AttendancePage = {
         `;
 
         window.App.showModal('Justificar retraso', modalContent);
-        document.getElementById('btn-cancel-justification').addEventListener('click', () => window.App.hideModal());
-        document.getElementById('delay-justification-form').addEventListener('submit', async event => {
-            event.preventDefault();
-            const submit = event.submitter;
-            if (submit.disabled) return;
-            const status = submit.dataset.status || 'JUSTIFIED';
+        document
+            .getElementById('btn-cancel-justification')
+            .addEventListener('click', () => window.App.hideModal());
+        document
+            .getElementById('delay-justification-form')
+            .addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const submit = event.submitter;
+                if (submit.disabled) return;
+                const status = submit.dataset.status || 'JUSTIFIED';
 
-            const reason = document.getElementById('justification-reason').value.trim();
-            const notes = document.getElementById('justification-notes').value.trim();
-            submit.disabled = true;
-            const previousText = submit.textContent;
-            submit.textContent = 'Guardando...';
+                const reason = document.getElementById('justification-reason').value.trim();
+                const notes = document.getElementById('justification-notes').value.trim();
+                submit.disabled = true;
+                const previousText = submit.textContent;
+                submit.textContent = 'Guardando...';
 
-            try {
-                await Promise.all(delayedSessions.map(session => window.api.justifyAttendanceSession(session.id, {
-                    status,
-                    reason,
-                    notes,
-                    decisionReason: reason
-                })));
-                window.App.hideModal();
-                window.App.showToast(`Retraso de ${employeeName} ${status === 'JUSTIFIED' ? 'justificado' : 'rechazado'} correctamente.`, 'success');
-                await this.loadEntries();
-            } catch (error) {
-                window.App.showToast('No se pudo guardar la justificación: ' + error.message, 'error');
-            } finally {
-                if (document.body.contains(submit)) {
-                    submit.disabled = false;
-                    submit.textContent = previousText;
+                try {
+                    await Promise.all(
+                        delayedSessions.map((session) =>
+                            window.api.justifyAttendanceSession(session.id, {
+                                status,
+                                reason,
+                                notes,
+                                decisionReason: reason,
+                            })
+                        )
+                    );
+                    window.App.hideModal();
+                    window.App.showToast(
+                        `Retraso de ${employeeName} ${status === 'JUSTIFIED' ? 'justificado' : 'rechazado'} correctamente.`,
+                        'success'
+                    );
+                    await this.loadEntries();
+                } catch (error) {
+                    window.App.showToast(
+                        'No se pudo guardar la justificación: ' + error.message,
+                        'error'
+                    );
+                } finally {
+                    if (document.body.contains(submit)) {
+                        submit.disabled = false;
+                        submit.textContent = previousText;
+                    }
                 }
-            }
-        });
+            });
     },
 
     openAttendanceModal(entry = null) {
         const isEdit = !!entry;
         const now = new Date();
-        
+
         // Formatear fecha y hora locales correctas
         const year = now.getFullYear();
         const month = String(now.getMonth() + 1).padStart(2, '0');
         const day = String(now.getDate()).padStart(2, '0');
         const todayLocal = `${year}-${month}-${day}`;
         const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-        
-        const employeeOptions = this.users.map(u => 
-            `<option value="${u.id}">${u.firstName} ${u.lastName} (Programado: ${u.scheduledEntryTime})</option>`
-        ).join('');
+
+        const employeeOptions = this.users
+            .map(
+                (u) =>
+                    `<option value="${u.id}">${this.escapeHtml(`${u.firstName} ${u.lastName} (Programado: ${u.scheduledEntryTime})`)}</option>`
+            )
+            .join('');
 
         const modalContent = `
             <form id="attendance-form" class="mt-2">
@@ -468,17 +624,17 @@ window.AttendancePage = {
                 <div class="flex gap-2">
                     <div class="form-group flex-1">
                         <label for="att-date">Fecha de Asistencia (Servidor)</label>
-                        <input type="date" id="att-date" class="form-control" readonly style="pointer-events: none; opacity: 0.8; background: rgba(255,255,255,0.05);" required value="${isEdit ? entry.date.split('T')[0] : todayLocal}">
+                        <input type="date" id="att-date" class="form-control" readonly style="pointer-events: none; opacity: 0.8; background: var(--tint);" required value="${isEdit ? entry.date.split('T')[0] : todayLocal}">
                     </div>
                     <div class="form-group flex-1">
                         <label for="att-actual">Hora de Ingreso Real (Servidor)</label>
-                        <input type="time" id="att-actual" class="form-control" readonly style="pointer-events: none; opacity: 0.8; background: rgba(255,255,255,0.05);" required value="${isEdit ? entry.actualEntry : currentTime}">
+                        <input type="time" id="att-actual" class="form-control" readonly style="pointer-events: none; opacity: 0.8; background: var(--tint);" required value="${isEdit ? this.escapeHtml(entry.actualEntry) : currentTime}">
                     </div>
                 </div>
                 
                 <div class="form-group">
                     <label for="att-notes">Notas / Justificación</label>
-                    <textarea id="att-notes" class="form-control" rows="2" placeholder="Escribe alguna observación (ej. retraso justificado)...">${isEdit ? entry.notes || '' : ''}</textarea>
+                    <textarea id="att-notes" class="form-control" rows="2" placeholder="Escribe alguna observación (ej. retraso justificado)...">${isEdit ? this.escapeHtml(entry.notes || '') : ''}</textarea>
                 </div>
 
                 <div class="flex-end gap-2 mt-3">
@@ -488,8 +644,13 @@ window.AttendancePage = {
             </form>
         `;
 
-        window.App.showModal(isEdit ? 'Modificar Observaciones' : 'Registrar Nueva Entrada de Asistencia', modalContent);
-        document.getElementById('btn-cancel-attendance').addEventListener('click', () => window.App.hideModal());
+        window.App.showModal(
+            isEdit ? 'Modificar Observaciones' : 'Registrar Nueva Entrada de Asistencia',
+            modalContent
+        );
+        document
+            .getElementById('btn-cancel-attendance')
+            .addEventListener('click', () => window.App.hideModal());
 
         if (isEdit) {
             document.getElementById('att-user').value = entry.userId;
@@ -498,23 +659,44 @@ window.AttendancePage = {
         // Submit
         document.getElementById('attendance-form').addEventListener('submit', async (e) => {
             e.preventDefault();
-            
+
             const data = {
                 userId: document.getElementById('att-user').value,
                 date: document.getElementById('att-date').value,
                 actualEntry: document.getElementById('att-actual').value,
-                notes: document.getElementById('att-notes').value
+                notes: document.getElementById('att-notes').value,
             };
 
-            const submit=e.submitter; if(submit.disabled)return; submit.disabled=true; const previous=submit.textContent;submit.textContent='Procesando…';
+            const submit = e.submitter;
+            if (submit.disabled) return;
+
+            submit.disabled = true;
+            const previousText = submit.textContent;
+            submit.textContent = 'Procesando…';
+
             try {
-                if(isEdit) await window.api.upsertAttendance(data); else await window.api.clockInSession({userId:Number(data.userId),notes:data.notes});
-                window.App.showToast(isEdit ? 'Notas actualizadas' : 'Asistencia (Entrada) registrada correctamente', 'success');
+                if (isEdit) {
+                    await window.api.upsertAttendance(data);
+                } else {
+                    await window.api.clockInSession({
+                        userId: Number(data.userId),
+                        notes: data.notes,
+                    });
+                }
+                window.App.showToast(
+                    isEdit ? 'Notas actualizadas' : 'Asistencia (Entrada) registrada correctamente',
+                    'success'
+                );
                 window.App.hideModal();
                 await this.loadEntries();
             } catch (error) {
                 window.App.showToast('Error al registrar: ' + error.message, 'error');
-            } finally { if(document.body.contains(submit)){submit.disabled=false;submit.textContent=previous;} }
+            } finally {
+                if (document.body.contains(submit)) {
+                    submit.disabled = false;
+                    submit.textContent = previousText;
+                }
+            }
         });
     },
 
@@ -527,5 +709,5 @@ window.AttendancePage = {
         } catch (error) {
             window.App.showToast('Error al registrar salida: ' + error.message, 'error');
         }
-    }
+    },
 };

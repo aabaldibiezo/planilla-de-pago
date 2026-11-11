@@ -1,62 +1,131 @@
 const nodemailer = require('nodemailer');
-const path = require('path');
 
 /**
- * Send payment receipt email to an employee with the PDF as attachment.
- * Returns an object: { success: boolean, error?: string }
+ * Construye el transporte SMTP. Devuelve `null` (con el motivo) cuando la
+ * configuración falta o conserva los valores de ejemplo del archivo .env.
  */
-const sendReceiptEmail = async (user, payment, pdfPath) => {
+const buildTransport = () => {
   const host = process.env.SMTP_HOST || 'smtp.gmail.com';
   const port = parseInt(process.env.SMTP_PORT || '587', 10);
-  const secure = port === 465;
   const userEmail = process.env.SMTP_USER;
   const password = process.env.SMTP_PASS;
-  const from = process.env.EMAIL_FROM || process.env.SMTP_FROM || `"Planilla de Pago" <${userEmail}>`;
 
-  if (!userEmail || !password || userEmail.includes('tu_correo') || password.includes('tu_contraseña')) {
-    const msg = 'Credenciales SMTP no configuradas o con valores de prueba en el archivo .env';
-    console.warn(`⚠️ ${msg}. Se omitió el envío a ${user.email}.`);
-    return { success: false, error: msg };
+  if (
+    !userEmail ||
+    !password ||
+    userEmail.includes('tu_correo') ||
+    password.includes('tu_contraseña')
+  ) {
+    return {
+      transporter: null,
+      error: 'Credenciales SMTP no configuradas o con valores de prueba en el archivo .env',
+    };
+  }
+
+  const transporter = nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: { user: userEmail, pass: password },
+    tls: { rejectUnauthorized: process.env.SMTP_REJECT_UNAUTHORIZED !== 'false' },
+  });
+
+  const from =
+    process.env.EMAIL_FROM || process.env.SMTP_FROM || `"Planilla de Pago" <${userEmail}>`;
+
+  return { transporter, from, error: null };
+};
+
+/**
+ * Envía un correo y normaliza el resultado a { success, error }.
+ * Nunca lanza: los llamadores deben poder continuar aunque el correo falle.
+ */
+const send = async (mailOptions, recipient) => {
+  const { transporter, from, error } = buildTransport();
+
+  if (!transporter) {
+    console.warn(`⚠️ ${error}. Se omitió el envío a ${recipient}.`);
+    return { success: false, error };
   }
 
   try {
-    const transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure,
-      auth: {
-        user: userEmail,
-        pass: password,
-      },
-      tls: { rejectUnauthorized: process.env.SMTP_REJECT_UNAUTHORIZED !== 'false' }
-    });
-
-    const months = [
-      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
-    ];
-    const monthName = months[payment.month - 1];
-
-    const mailOptions = {
-      from,
-      to: user.email,
-      subject: `Boleta de Pago de Nomina - ${monthName} ${payment.year}`,
-      text: `Hola ${user.firstName},\n\nAdjuntamos la boleta de pago correspondiente a la nomina de ${monthName} de ${payment.year}.\n\nDetalle del Pago:\n- Salario Mensual Base: ${parseFloat(payment.monthlySalary).toFixed(2)} Bs.\n- Horas efectivamente trabajadas: ${parseFloat(payment.totalHours).toFixed(2)} hrs.\n- Salario Bruto devengado: ${parseFloat(payment.grossPay).toFixed(2)} Bs.\n- Retraso total: ${payment.totalDelayMinutes} minutos (${parseFloat(payment.delayHours).toFixed(2)} horas)\n- Descuento por retrasos: ${parseFloat(payment.discountAmount).toFixed(2)} Bs.\n- Otros descuentos: ${Math.max(0, Number(payment.totalDiscounts || 0) - Number(payment.discountAmount || 0)).toFixed(2)} Bs.\n- Total descuentos: ${Number(payment.totalDiscounts || payment.discountAmount || 0).toFixed(2)} Bs.\n- Salario Neto a Pagar: ${parseFloat(payment.netPay).toFixed(2)} Bs.\n\nPor favor revise el archivo PDF adjunto.\n\nSaludos cordiales,\nEl equipo de Planilla de Pago`,
-      attachments: [
-        {
-          filename: path.basename(pdfPath),
-          path: pdfPath,
-        },
-      ],
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`✉️ Email successfully sent to ${user.email}. MessageId: ${info.messageId}`);
+    const info = await transporter.sendMail({ from, ...mailOptions });
+    console.log(`✉️ Correo enviado a ${recipient}. MessageId: ${info.messageId}`);
     return { success: true };
-  } catch (error) {
-    console.error(`❌ Failed to send email to ${user.email}:`, error);
-    return { success: false, error: error.message || error.toString() };
+  } catch (sendError) {
+    console.error(`❌ Falló el envío a ${recipient}:`, sendError);
+    return { success: false, error: sendError.message || sendError.toString() };
   }
 };
 
-module.exports = { sendReceiptEmail };
+/**
+ * Envía al empleado su contraseña temporal de primer acceso.
+ *
+ * La contraseña viaja en el cuerpo del correo porque es de un solo uso: el
+ * sistema obliga a cambiarla en el primer inicio de sesión.
+ */
+const sendCredentialsEmail = async (user, temporaryPassword, appUrl) => {
+  const accessLine = appUrl ? `\nIngrese desde: ${appUrl}\n` : '';
+
+  return send(
+    {
+      to: user.email,
+      subject: 'Sus credenciales de acceso - Planilla de Pago',
+      text: `Hola ${user.firstName},
+
+Se creó su acceso al sistema de asistencia y nómina.
+${accessLine}
+Usuario: ${user.email}
+Contraseña temporal: ${temporaryPassword}
+
+Por seguridad, el sistema le pedirá cambiar esta contraseña la primera vez que ingrese.
+Esta contraseña temporal deja de servir apenas defina la suya.
+
+Si usted no esperaba este mensaje, avise a su supervisor.
+
+Saludos cordiales,
+El equipo de Planilla de Pago`,
+    },
+    user.email
+  );
+};
+
+/**
+ * Avisa a la empresa que su suscripción está por vencer.
+ *
+ * ⚠️ El monto va en dólares: la suscripción de la plataforma se cobra en USD,
+ * a diferencia de los sueldos que la empresa liquida en bolivianos.
+ */
+const sendSubscriptionReminderEmail = async (company, diasRestantes) => {
+  const cuando =
+    diasRestantes <= 0
+      ? 'vence hoy'
+      : `vence en ${diasRestantes} ${diasRestantes === 1 ? 'día' : 'días'}`;
+
+  const vencimiento = new Date(company.nextDueDate).toISOString().slice(0, 10);
+  const monto = Number(company.plan.monthlyPriceUsd).toFixed(2);
+
+  return send(
+    {
+      to: company.contactEmail,
+      subject: `Su suscripción ${cuando} - Planilla de Pago`,
+      text: `Estimados de ${company.name},
+
+Su suscripción al plan ${company.plan.name} ${cuando} (${vencimiento}).
+
+Importe mensual: USD ${monto}
+
+Si el pago no se registra antes de esa fecha, la cuenta pasa a modo de solo
+lectura: van a poder ingresar y consultar todo su historial, pero no registrar
+asistencia, cargar empleados ni liquidar pagos hasta regularizar.
+
+Ante cualquier duda, responda este correo.
+
+Saludos cordiales,
+El equipo de Planilla de Pago`,
+    },
+    company.contactEmail
+  );
+};
+
+module.exports = { sendCredentialsEmail, sendSubscriptionReminderEmail };
