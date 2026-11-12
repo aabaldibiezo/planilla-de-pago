@@ -22,9 +22,9 @@ const prisma = new PrismaClient();
 
 /** `maxEmployees: null` significa ilimitado. */
 const PLANES = [
-  { code: 'ESENCIAL', name: 'Esencial', maxEmployees: 10, monthlyPriceUsd: 25.0 },
-  { code: 'PROFESIONAL', name: 'Profesional', maxEmployees: 30, monthlyPriceUsd: 45.0 },
-  { code: 'EMPRESARIAL', name: 'Empresarial', maxEmployees: null, monthlyPriceUsd: 55.0 },
+  { code: 'ESENCIAL', name: 'Base', maxEmployees: 10, monthlyPriceUsd: 30.0 },
+  { code: 'PROFESIONAL', name: 'Mediano', maxEmployees: 30, monthlyPriceUsd: 45.0 },
+  { code: 'EMPRESARIAL', name: 'Premium', maxEmployees: null, monthlyPriceUsd: 50.0 },
 ];
 
 async function main() {
