@@ -14,7 +14,16 @@
         ACTIVA: { etiqueta: 'Activa', clase: 'estado-activa' },
         POR_VENCER: { etiqueta: 'Por vencer', clase: 'estado-por-vencer' },
         SUSPENDIDA: { etiqueta: 'Solo lectura', clase: 'estado-suspendida' },
+        DESACTIVADA: { etiqueta: 'Desactivada', clase: 'estado-desactivada' },
     };
+
+    /** Pago anual: 12 meses pagados + 2 de regalo. */
+    const MESES_REGALO_ANUAL = 2;
+
+    /** Correo o celular, lo que tenga la persona. */
+    const contacto = (persona) => persona?.email || persona?.phone || persona?.contactEmail || persona?.contactPhone || '—';
+
+    const pareceCorreo = (valor) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(valor);
 
     let empresas = [];
     let planes = [];
@@ -117,15 +126,15 @@
         // Solo se factura lo que no está suspendido: una empresa en solo
         // lectura no está generando ingreso este mes.
         const recurrente = empresas
-            .filter((empresa) => empresa.statusLabel !== 'SUSPENDIDA')
+            .filter((empresa) => empresa.statusLabel !== 'SUSPENDIDA' && empresa.statusLabel !== 'DESACTIVADA')
             .reduce((suma, empresa) => suma + Number(empresa.plan.monthlyPriceUsd), 0);
 
         const tarjetas = [
             { etiqueta: 'Empresas activas', valor: contar('ACTIVA'), modificador: 'indicador-ok' },
             { etiqueta: 'Por vencer', valor: contar('POR_VENCER'), modificador: 'indicador-warn' },
             {
-                etiqueta: 'En solo lectura',
-                valor: contar('SUSPENDIDA'),
+                etiqueta: 'Sin pagar o desactivadas',
+                valor: contar('SUSPENDIDA') + contar('DESACTIVADA'),
                 modificador: 'indicador-danger',
             },
             { etiqueta: 'Ingreso mensual', valor: dolares(recurrente), modificador: '' },
@@ -150,7 +159,7 @@
             .filter((empresa) => empresa.name.toLocaleLowerCase('es').includes(textoBusqueda))
             // Lo urgente primero: solo lectura, luego por vencer, luego activas.
             .sort((a, b) => {
-                const orden = { SUSPENDIDA: 0, POR_VENCER: 1, ACTIVA: 2 };
+                const orden = { SUSPENDIDA: 0, POR_VENCER: 1, ACTIVA: 2, DESACTIVADA: 3 };
                 if (orden[a.statusLabel] !== orden[b.statusLabel]) {
                     return orden[a.statusLabel] - orden[b.statusLabel];
                 }
@@ -168,11 +177,11 @@
             .map((empresa) => {
                 const estado = ESTADOS[empresa.statusLabel];
                 const claseFila =
-                    empresa.statusLabel === 'SUSPENDIDA'
-                        ? 'fila-suspendida'
-                        : empresa.statusLabel === 'POR_VENCER'
-                          ? 'fila-por-vencer'
-                          : '';
+                    {
+                        SUSPENDIDA: 'fila-suspendida',
+                        POR_VENCER: 'fila-por-vencer',
+                        DESACTIVADA: 'fila-desactivada',
+                    }[empresa.statusLabel] || '';
 
                 // Marca el uso al tope para que se vea sin leer los números.
                 const alLimite =
@@ -185,7 +194,7 @@
               <span class="avatar-empresa" aria-hidden="true">${escapar(iniciales(empresa.name))}</span>
               <div>
                 <div class="nombre-empresa">${escapar(empresa.name)}</div>
-                <div class="dato-secundario">${escapar(empresa.contactEmail)}</div>
+                <div class="dato-secundario">${escapar(contacto(empresa))}</div>
               </div>
             </div>
           </td>
@@ -223,15 +232,37 @@
         const empresa = await intentar(() => api.empresa(id));
         if (!empresa) return;
 
-        const hoy = new Date();
+        // El pago cubre desde el mes que vence, no desde el mes de hoy.
+        const desde = new Date(`${String(empresa.nextDueDate).slice(0, 10)}T12:00:00`);
         const pagos = empresa.payments || [];
         const totalCobrado = pagos.reduce((suma, pago) => suma + Number(pago.amountUsd), 0);
 
+        const precio = Number(empresa.plan.monthlyPriceUsd);
+        const activa = empresa.isActive !== false;
+
         abrirLateral(
             empresa.name,
-            empresa.contactEmail,
+            contacto(empresa),
             `
-      <div class="resumen-suscripcion">
+      <h3 class="titulo-seccion" style="margin-top:0">Acceso de la empresa</h3>
+      <div class="zona-cuenta">
+        <div>
+          <span class="estado ${ESTADOS[empresa.statusLabel].clase}">${ESTADOS[empresa.statusLabel].etiqueta}</span>
+          <div class="dato-secundario" style="margin-top:6px">
+            ${
+                activa
+                    ? 'Su administrador y su personal pueden entrar.'
+                    : 'Nadie de la empresa puede entrar. Sus datos se conservan.'
+            }
+          </div>
+        </div>
+        <button type="button" class="boton ${activa ? 'boton-peligro' : 'boton-primario'}"
+                data-cambiar-acceso="${empresa.id}" data-activa="${activa}">
+          ${activa ? 'Desactivar' : 'Reactivar'}
+        </button>
+      </div>
+
+      <div class="resumen-suscripcion" style="margin-top:18px">
         <div>
           <div class="resumen-item-etiqueta">Plan</div>
           <div class="resumen-item-valor">${escapar(empresa.plan.name)}</div>
@@ -267,23 +298,31 @@
 
       <h3 class="titulo-seccion">Registrar pago</h3>
       <p class="dato-secundario" style="margin-bottom:12px">
-        Al registrarlo, la empresa vuelve a estado activo y el vencimiento avanza un mes desde el
+        Al registrarlo, la empresa vuelve a quedar activa y el vencimiento avanza desde el
         vencimiento anterior (${fechaLarga(empresa.nextDueDate)}), no desde hoy.
       </p>
       <form id="form-pago" class="formulario">
         <div class="campo">
+          <label for="pago-tipo">Tipo de pago</label>
+          <select id="pago-tipo" data-precio="${precio}">
+            <option value="1">Mensual — 1 mes</option>
+            <option value="12">Anual — 12 meses + ${MESES_REGALO_ANUAL} de regalo</option>
+          </select>
+        </div>
+        <div class="resumen-pago" id="pago-resumen">Cubre 1 mes</div>
+        <div class="campo">
           <label for="pago-monto">Importe en dólares (USD)</label>
           <input type="number" id="pago-monto" step="0.01" min="0.01"
-                 value="${Number(empresa.plan.monthlyPriceUsd).toFixed(2)}" required />
+                 value="${precio.toFixed(2)}" required />
         </div>
         <div class="campo-doble">
           <div class="campo">
-            <label for="pago-mes">Mes que cubre</label>
-            <input type="number" id="pago-mes" min="1" max="12" value="${hoy.getMonth() + 1}" required />
+            <label for="pago-mes">Desde el mes</label>
+            <input type="number" id="pago-mes" min="1" max="12" value="${desde.getMonth() + 1}" required />
           </div>
           <div class="campo">
             <label for="pago-anio">Año</label>
-            <input type="number" id="pago-anio" min="2020" max="2100" value="${hoy.getFullYear()}" required />
+            <input type="number" id="pago-anio" min="2020" max="2100" value="${desde.getFullYear()}" required />
           </div>
         </div>
         <div class="campo">
@@ -304,7 +343,16 @@
                         (pago) => `
         <div class="pago">
           <div>
-            <div class="pago-periodo">${escapar(String(pago.periodMonth).padStart(2, '0'))}/${escapar(pago.periodYear)}</div>
+            <div class="pago-periodo">
+              ${escapar(String(pago.periodMonth).padStart(2, '0'))}/${escapar(pago.periodYear)}
+              · ${
+                  Number(pago.monthsPaid || 1) >= 12
+                      ? `Anual (${escapar(pago.monthsPaid)} + ${escapar(pago.bonusMonths)} de regalo)`
+                      : Number(pago.monthsPaid || 1) > 1
+                        ? `${escapar(pago.monthsPaid)} meses`
+                        : 'Mensual'
+              }
+            </div>
             <div class="dato-secundario">
               Registrado el ${fechaLarga(pago.paidAt)} · Plan ${escapar(pago.planNameSnapshot)}
             </div>
@@ -322,7 +370,7 @@
         <div class="pago">
           <div>
             <div class="pago-periodo">${escapar(admin.firstName)} ${escapar(admin.lastName)}</div>
-            <div class="dato-secundario">${escapar(admin.email)}</div>
+            <div class="dato-secundario">Ingresa con: ${escapar(contacto(admin))}</div>
           </div>
           <span class="estado ${admin.isActive ? 'estado-activa' : 'estado-suspendida'}">
             ${admin.isActive ? 'Activo' : 'Inactivo'}
@@ -339,7 +387,7 @@
     const abrirAltaEmpresa = () => {
         abrirLateral(
             'Nueva empresa cliente',
-            'Se crea la empresa y su primer administrador, que recibe una contraseña temporal por correo.',
+            'Se crea la empresa y su administrador con una contraseña temporal para que entre.',
             `
       <form id="form-empresa" class="formulario">
         <h3 class="titulo-seccion">Datos de la empresa</h3>
@@ -347,19 +395,19 @@
           <label for="empresa-nombre">Nombre</label>
           <input type="text" id="empresa-nombre" required maxlength="150" />
         </div>
-        <div class="campo">
-          <label for="empresa-correo">Correo de contacto</label>
-          <input type="email" id="empresa-correo" required />
-        </div>
         <div class="campo-doble">
+          <div class="campo">
+            <label for="empresa-correo">Correo (opcional)</label>
+            <input type="email" id="empresa-correo" />
+          </div>
           <div class="campo">
             <label for="empresa-telefono">Teléfono (opcional)</label>
             <input type="text" id="empresa-telefono" maxlength="30" />
           </div>
-          <div class="campo">
-            <label for="empresa-nit">NIT (opcional)</label>
-            <input type="text" id="empresa-nit" maxlength="50" />
-          </div>
+        </div>
+        <div class="campo">
+          <label for="empresa-nit">NIT (opcional)</label>
+          <input type="text" id="empresa-nit" maxlength="50" />
         </div>
         <div class="campo">
           <label for="empresa-plan">Plan</label>
@@ -378,8 +426,9 @@
           </div>
         </div>
         <div class="campo">
-          <label for="admin-correo">Correo de acceso</label>
-          <input type="email" id="admin-correo" required />
+          <label for="admin-correo">Correo o celular para entrar</label>
+          <input type="text" id="admin-correo" required placeholder="ejemplo@correo.com o 71234567" />
+          <span class="ayuda-campo">Con esto y la contraseña temporal entra al sistema.</span>
         </div>
 
         <button type="submit" class="boton boton-primario boton-ancho">Crear empresa</button>
@@ -431,7 +480,7 @@
                 (admin) => `
       <tr>
         <td>${escapar(admin.firstName)} ${escapar(admin.lastName)}</td>
-        <td>${escapar(admin.email)}</td>
+        <td>${escapar(contacto(admin))}</td>
         <td>${admin.lastLoginAt ? fechaLarga(admin.lastLoginAt) : 'Nunca'}</td>
         <td>
           <span class="estado ${admin.isActive ? 'estado-activa' : 'estado-suspendida'}">
@@ -514,7 +563,7 @@
         }
 
         mostrarPantalla('pantalla-panel');
-        document.getElementById('usuario-actual').textContent = usuario.email;
+        document.getElementById('usuario-actual').textContent = contacto(usuario);
         cargarSeccion('empresas');
     };
 
@@ -645,6 +694,7 @@
             if (formulario.id === 'form-pago') {
                 const empresaId = Number(enviar.dataset.empresa);
                 const { company } = await api.registrarPago(empresaId, {
+                    monthsPaid: Number(document.getElementById('pago-tipo').value),
                     amountUsd: Number(document.getElementById('pago-monto').value),
                     periodMonth: Number(document.getElementById('pago-mes').value),
                     periodYear: Number(document.getElementById('pago-anio').value),
@@ -660,25 +710,56 @@
             }
 
             if (formulario.id === 'form-empresa') {
+                const acceso = document.getElementById('admin-correo').value.trim();
                 const creada = await api.crearEmpresa({
                     name: document.getElementById('empresa-nombre').value.trim(),
-                    contactEmail: document.getElementById('empresa-correo').value.trim(),
+                    contactEmail: document.getElementById('empresa-correo').value.trim() || undefined,
                     contactPhone: document.getElementById('empresa-telefono').value || undefined,
                     taxId: document.getElementById('empresa-nit').value || undefined,
                     planId: Number(document.getElementById('empresa-plan').value),
-                    adminEmail: document.getElementById('admin-correo').value.trim(),
+                    ...(pareceCorreo(acceso) ? { adminEmail: acceso } : { adminPhone: acceso }),
                     adminFirstName: document.getElementById('admin-nombre').value.trim(),
                     adminLastName: document.getElementById('admin-apellido').value.trim(),
                 });
-                cerrarLateral();
                 await cargarEmpresas();
-                avisar(
-                    creada.credentialsDelivered
-                        ? `Empresa creada. Se envió la contraseña temporal a ${creada.admin.email}.`
-                        : `Empresa creada, pero falló el envío del correo (${creada.credentialsError}). ` +
-                          'Use "restablecer contraseña" desde el panel de la empresa para reenviarla.',
-                    !creada.credentialsDelivered
+
+                if (creada.credentialsDelivered) {
+                    cerrarLateral();
+                    avisar(`Empresa creada. Se envió la contraseña temporal a ${creada.admin.email}.`, false);
+                    return;
+                }
+
+                // Sin correo: se muestra la contraseña para pasarla por WhatsApp.
+                const usuarioAcceso = contacto(creada.admin);
+                const mensaje =
+                    `Hola ${creada.admin.firstName}, ya tiene su cuenta del sistema de planilla.\n` +
+                    `Entre a: ${window.location.origin}\n` +
+                    `Usuario: ${usuarioAcceso}\n` +
+                    `Contraseña temporal: ${creada.temporaryPassword}\n` +
+                    'Al entrar le pedirá elegir una contraseña propia.';
+                abrirLateral(
+                    'Empresa creada',
+                    creada.name,
+                    `
+      <p>Pásele estos datos al administrador. La contraseña <strong>no se vuelve a mostrar</strong>.</p>
+      <p class="dato-secundario" style="margin-top:12px">Usuario</p>
+      <div class="clave-temporal">${escapar(usuarioAcceso)}</div>
+      <p class="dato-secundario">Contraseña temporal</p>
+      <div class="clave-temporal">${escapar(creada.temporaryPassword)}</div>
+      <a class="boton boton-primario boton-ancho" target="_blank" rel="noopener"
+         href="https://wa.me/?text=${encodeURIComponent(mensaje)}">Enviar por WhatsApp</a>
+      <button type="button" class="boton boton-secundario boton-ancho" style="margin-top:10px"
+              id="btn-copiar-acceso">Copiar mensaje</button>
+    `
                 );
+                document.getElementById('btn-copiar-acceso').addEventListener('click', async (e) => {
+                    try {
+                        await window.navigator.clipboard.writeText(mensaje);
+                        e.target.textContent = 'Copiado ✓';
+                    } catch {
+                        e.target.textContent = 'No se pudo copiar';
+                    }
+                });
                 return;
             }
 
@@ -706,6 +787,43 @@
                 enviar.textContent = textoOriginal;
             }
         }
+    });
+
+    // Mensual o anual: ajusta el importe sugerido y explica cuánto cubre.
+    document.getElementById('lateral-cuerpo').addEventListener('change', (evento) => {
+        if (evento.target.id !== 'pago-tipo') return;
+        const meses = Number(evento.target.value);
+        const precio = Number(evento.target.dataset.precio);
+        document.getElementById('pago-monto').value = (precio * meses).toFixed(2);
+        document.getElementById('pago-resumen').textContent =
+            meses >= 12
+                ? `Paga ${meses} meses y cubre ${meses + MESES_REGALO_ANUAL} (${MESES_REGALO_ANUAL} de regalo)`
+                : 'Cubre 1 mes';
+    });
+
+    document.getElementById('lateral-cuerpo').addEventListener('click', async (evento) => {
+        const boton = evento.target.closest('[data-cambiar-acceso]');
+        if (!boton) return;
+
+        const id = Number(boton.dataset.cambiarAcceso);
+        const activa = boton.dataset.activa === 'true';
+        const pregunta = activa
+            ? '¿Desactivar esta empresa? Nadie de la empresa podrá entrar (ni el administrador ni el personal) hasta que la reactive. Sus datos no se borran.'
+            : '¿Reactivar esta empresa? Podrán volver a entrar.';
+        if (!window.confirm(pregunta)) return;
+
+        boton.disabled = true;
+        const resultado = await intentar(() => api.cambiarAcceso(id, !activa));
+        if (!resultado) {
+            boton.disabled = false;
+            return;
+        }
+        cerrarLateral();
+        await cargarEmpresas();
+        avisar(
+            activa ? `${resultado.name} quedó desactivada.` : `${resultado.name} volvió a estar activa.`,
+            false
+        );
     });
 
     document.getElementById('rejilla-planes').addEventListener('submit', async (evento) => {

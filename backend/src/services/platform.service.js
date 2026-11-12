@@ -3,7 +3,13 @@ const prisma = require('../lib/prisma');
 const emailService = require('./email.service');
 const statementService = require('./statement.service');
 const { generateTemporaryPassword } = require('../lib/credentials');
-const { proximoVencimiento, sumarUnMes, etiquetaDeEstado } = require('../lib/subscription');
+const {
+  sumarUnMes,
+  etiquetaDeEstado,
+  mesesCubiertos,
+  vencimientoTrasPago,
+} = require('../lib/subscription');
+const { normalizePhone, isValidPhone } = require('../lib/contact');
 
 /**
  * Administración de la plataforma: empresas clientes, planes y cobros.
@@ -86,7 +92,7 @@ const getCompany = async (id) => {
   // Los administradores se listan para poder contactarlos; nunca los empleados.
   const admins = await prisma.user.findMany({
     where: { companyId: company.id, role: 'ADMIN' },
-    select: { id: true, firstName: true, lastName: true, email: true, isActive: true },
+    select: { id: true, firstName: true, lastName: true, email: true, phone: true, isActive: true },
     orderBy: { createdAt: 'asc' },
   });
 
@@ -108,8 +114,21 @@ const createCompany = async (data, actorId) => {
   const plan = await prisma.plan.findUnique({ where: { id: Number(data.planId) } });
   if (!plan || !plan.isActive) throw new Error('El plan seleccionado no existe o está inactivo');
 
-  const existente = await prisma.user.findUnique({ where: { email: data.adminEmail } });
-  if (existente) throw new Error('El email del administrador ya está registrado');
+  // El administrador entra con correo o con celular; basta uno de los dos.
+  const adminEmail = data.adminEmail ? String(data.adminEmail).trim().toLowerCase() : null;
+  const adminPhone = data.adminPhone ? normalizePhone(data.adminPhone) : null;
+  if (!adminEmail && !adminPhone) {
+    throw new Error('Indique el correo o el celular del administrador');
+  }
+  if (data.adminPhone && !isValidPhone(data.adminPhone)) {
+    throw new Error('El celular del administrador debe tener 8 dígitos y empezar con 6 o 7');
+  }
+  if (adminEmail && (await prisma.user.findUnique({ where: { email: adminEmail } }))) {
+    throw new Error('El correo del administrador ya está registrado');
+  }
+  if (adminPhone && (await prisma.user.findUnique({ where: { phone: adminPhone } }))) {
+    throw new Error('El celular del administrador ya está registrado');
+  }
 
   const temporaryPassword = generateTemporaryPassword();
   const salt = await bcrypt.genSalt(10);
@@ -120,7 +139,7 @@ const createCompany = async (data, actorId) => {
       data: {
         name: data.name,
         taxId: data.taxId || null,
-        contactEmail: data.contactEmail,
+        contactEmail: data.contactEmail || adminEmail || null,
         contactPhone: data.contactPhone || null,
         planId: plan.id,
         status: 'ACTIVE',
@@ -134,7 +153,8 @@ const createCompany = async (data, actorId) => {
     const admin = await tx.user.create({
       data: {
         companyId: company.id,
-        email: data.adminEmail,
+        email: adminEmail,
+        phone: adminPhone,
         password: hashedPassword,
         firstName: data.adminFirstName,
         lastName: data.adminLastName,
@@ -145,7 +165,7 @@ const createCompany = async (data, actorId) => {
         hourlyRate: 0,
         mustChangePassword: true,
       },
-      select: { id: true, email: true, firstName: true, lastName: true },
+      select: { id: true, email: true, phone: true, firstName: true, lastName: true },
     });
 
     // Categorías de gasto predefinidas, para que el estado de resultados
@@ -157,11 +177,15 @@ const createCompany = async (data, actorId) => {
 
   // Fuera de la transacción: un SMTP caído no debe revertir el alta. Queda el
   // reenvío de credenciales desde el panel de la empresa como vía de rescate.
-  const delivery = await emailService.sendCredentialsEmail(
-    resultado.admin,
-    temporaryPassword,
-    process.env.APP_PUBLIC_URL
-  );
+  // Sin correo (o sin servidor de correo) la contraseña temporal se devuelve
+  // para que el súper administrador se la pase por WhatsApp; si no, se perdería.
+  const delivery = adminEmail
+    ? await emailService.sendCredentialsEmail(
+        resultado.admin,
+        temporaryPassword,
+        process.env.APP_PUBLIC_URL
+      )
+    : { success: false, error: 'El administrador no tiene correo' };
 
   if (delivery.success) {
     await prisma.user.update({
@@ -180,6 +204,7 @@ const createCompany = async (data, actorId) => {
     admin: resultado.admin,
     credentialsDelivered: delivery.success,
     credentialsError: delivery.success ? null : delivery.error,
+    temporaryPassword: delivery.success ? null : temporaryPassword,
   };
 };
 
@@ -232,7 +257,8 @@ const registerPayment = async (companyId, data, actorId) => {
     if (!company) throw new Error('Empresa no encontrada');
 
     const paidAt = data.paidAt ? new Date(data.paidAt) : new Date();
-    const nuevoVencimiento = proximoVencimiento(company.nextDueDate, paidAt);
+    const meses = mesesCubiertos(data.monthsPaid);
+    const nuevoVencimiento = vencimientoTrasPago(company.nextDueDate, paidAt, meses.total);
 
     const pago = await tx.subscriptionPayment.create({
       data: {
@@ -241,6 +267,8 @@ const registerPayment = async (companyId, data, actorId) => {
         paidAt,
         periodMonth: Number(data.periodMonth),
         periodYear: Number(data.periodYear),
+        monthsPaid: meses.pagados,
+        bonusMonths: meses.regalo,
         planNameSnapshot: company.plan.name,
         planPriceUsdSnapshot: company.plan.monthlyPriceUsd,
         recordedBy: actorId,
@@ -262,6 +290,27 @@ const registerPayment = async (companyId, data, actorId) => {
 
     return { payment: pago, company: actualizada };
   });
+};
+
+/**
+ * Activa o desactiva una empresa a mano (por ejemplo, por falta de pago).
+ * Desactivada, nadie de la empresa puede entrar: ni el administrador ni el
+ * personal desde la app. Los datos se conservan intactos para cuando vuelva.
+ */
+const setCompanyActive = async (companyId, active, actorId) => {
+  const company = await prisma.company.findUnique({ where: { id: Number(companyId) } });
+  if (!company) throw new Error('Empresa no encontrada');
+
+  const actualizada = await prisma.company.update({
+    where: { id: company.id },
+    data: { isActive: Boolean(active), updatedBy: actorId },
+    include: { plan: { select: PLAN_FIELDS } },
+  });
+
+  const empleados = await prisma.user.count({
+    where: { companyId: company.id, role: 'EMPLOYEE', isActive: true },
+  });
+  return conUso(actualizada, empleados);
 };
 
 /** Planes con la cantidad de empresas que tiene cada uno. */
@@ -365,6 +414,7 @@ const listSuperAdmins = () =>
     select: {
       id: true,
       email: true,
+      phone: true,
       firstName: true,
       lastName: true,
       isActive: true,
@@ -378,6 +428,7 @@ module.exports = {
   listCompanies,
   getCompany,
   createCompany,
+  setCompanyActive,
   changePlan,
   registerPayment,
   listPlans,

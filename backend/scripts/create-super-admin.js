@@ -26,16 +26,25 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
 const bcrypt = require('bcryptjs');
 const { PrismaClient } = require('@prisma/client');
 const { assertPasswordStrength } = require('../src/lib/credentials');
+const { normalizePhone, isValidPhone } = require('../src/lib/contact');
 
 const prisma = new PrismaClient();
 
 async function main() {
-  const email = process.env.SUPER_ADMIN_EMAIL;
+  // Se entra con correo o con celular: basta con uno de los dos.
+  const email = process.env.SUPER_ADMIN_EMAIL || null;
+  const phoneRaw = process.env.SUPER_ADMIN_PHONE || '';
+  const phone = phoneRaw ? normalizePhone(phoneRaw) : null;
   const password = process.env.SUPER_ADMIN_PASSWORD;
 
-  if (!email || !password) {
+  if (phoneRaw && !isValidPhone(phoneRaw)) {
+    console.error('❌ SUPER_ADMIN_PHONE no es un celular válido (8 dígitos que empiezan con 6 o 7).');
+    process.exit(1);
+  }
+
+  if ((!email && !phone) || !password) {
     console.error(
-      '❌ Defina SUPER_ADMIN_EMAIL y SUPER_ADMIN_PASSWORD como variables de entorno.\n' +
+      '❌ Defina SUPER_ADMIN_EMAIL o SUPER_ADMIN_PHONE, y SUPER_ADMIN_PASSWORD.\n' +
         '   Puede ponerlas en backend/.env o pasarlas en la línea de comandos.\n\n' +
         '   Ejemplo:\n' +
         '     SUPER_ADMIN_EMAIL=admin@plataforma.com \\\n' +
@@ -54,16 +63,17 @@ async function main() {
   }
 
   // Verificar si ya existe.
-  const existente = await prisma.user.findUnique({ where: { email } });
+  const login = email || phone;
+  const existente = await prisma.user.findUnique({ where: email ? { email } : { phone } });
 
   if (existente) {
     if (existente.role === 'SUPER_ADMIN') {
-      console.log(`✅ El SUPER_ADMIN ${email} ya existe (id: ${existente.id}). Nada que hacer.`);
+      console.log(`✅ El SUPER_ADMIN ${login} ya existe (id: ${existente.id}). Nada que hacer.`);
       return;
     }
 
     console.error(
-      `❌ El correo ${email} ya está registrado con rol ${existente.role}.\n` +
+      `❌ ${login} ya está registrado con rol ${existente.role}.\n` +
         '   Usar un correo distinto, o convertirlo manualmente si es intencional.'
     );
     process.exit(1);
@@ -76,6 +86,7 @@ async function main() {
     data: {
       companyId: null, // SUPER_ADMIN no pertenece a ninguna empresa
       email,
+      phone,
       password: hashedPassword,
       firstName: process.env.SUPER_ADMIN_FIRST_NAME || 'Super',
       lastName: process.env.SUPER_ADMIN_LAST_NAME || 'Admin',
@@ -91,7 +102,7 @@ async function main() {
   console.log(
     `✅ SUPER_ADMIN creado:\n` +
       `   ID:    ${creado.id}\n` +
-      `   Email: ${creado.email}\n` +
+      `   Ingreso: ${creado.email || creado.phone}\n` +
       `   Rol:   ${creado.role}\n\n` +
       `   Puede iniciar sesión con las credenciales proporcionadas.`
   );

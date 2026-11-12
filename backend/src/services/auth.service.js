@@ -37,7 +37,11 @@ const login = async (identifier, password) => {
 
   // Una empresa dada de baja no puede acceder; una vencida sí, en solo lectura.
   if (user.company && !user.company.isActive) {
-    throw new Error('La cuenta de su empresa está desactivada. Contacte al administrador.');
+    const error = new Error(
+      'El acceso de su empresa está suspendido. Comuníquese con el proveedor del sistema.'
+    );
+    error.code = 'COMPANY_INACTIVE';
+    throw error;
   }
 
   const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, {

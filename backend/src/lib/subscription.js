@@ -64,6 +64,31 @@ const proximoVencimiento = (vencimientoActual, fechaDePago = new Date()) => {
   return siguiente;
 };
 
+/** Meses de regalo por pagar un año completo por adelantado. */
+const MESES_REGALO_ANUAL = 2;
+
+/**
+ * Meses que cubre un pago: los pagados más los de regalo.
+ * El pago anual (12 meses) suma 2 de regalo, así que cubre 14.
+ */
+const mesesCubiertos = (mesesPagados = 1) => {
+  const pagados = Math.max(1, Math.trunc(Number(mesesPagados) || 1));
+  const regalo = pagados >= 12 ? MESES_REGALO_ANUAL : 0;
+  return { pagados, regalo, total: pagados + regalo };
+};
+
+/**
+ * Vencimiento tras un pago que cubre varios meses: el primero se cuenta como
+ * un pago normal (desde el vencimiento anterior) y los demás se suman encima.
+ */
+const vencimientoTrasPago = (vencimientoActual, fechaDePago = new Date(), meses = 1) => {
+  let siguiente = proximoVencimiento(vencimientoActual, fechaDePago);
+  for (let i = 1; i < Math.max(1, meses); i += 1) {
+    siguiente = sumarUnMes(siguiente);
+  }
+  return siguiente;
+};
+
 /** ¿El vencimiento ya pasó? El día del vencimiento todavía se considera al día. */
 const estaVencida = (nextDueDate, hoy = new Date()) => soloFecha(nextDueDate) < soloFecha(hoy);
 
@@ -79,7 +104,7 @@ const diasHastaVencimiento = (nextDueDate, hoy = new Date()) =>
  * vencimiento cambia, sin necesidad de limpiar ninguna bandera.
  */
 const debeAvisar = (company, hoy = new Date()) => {
-  if (company.status !== 'ACTIVE') return false;
+  if (company.status !== 'ACTIVE' || company.isActive === false) return false;
 
   const dias = diasHastaVencimiento(company.nextDueDate, hoy);
   if (dias < 0 || dias > DIAS_DE_AVISO) return false;
@@ -94,6 +119,8 @@ const debeAvisar = (company, hoy = new Date()) => {
  * "Por vencer" no es un estado almacenado: se deriva de la cercanía de la fecha.
  */
 const etiquetaDeEstado = (company, hoy = new Date()) => {
+  // Desactivada a mano por el súper administrador: nadie de la empresa entra.
+  if (company.isActive === false) return 'DESACTIVADA';
   if (company.status === 'READ_ONLY') return 'SUSPENDIDA';
   return diasHastaVencimiento(company.nextDueDate, hoy) <= DIAS_DE_AVISO
     ? 'POR_VENCER'
@@ -105,6 +132,9 @@ module.exports = {
   soloFecha,
   sumarUnMes,
   proximoVencimiento,
+  MESES_REGALO_ANUAL,
+  mesesCubiertos,
+  vencimientoTrasPago,
   estaVencida,
   diasHastaVencimiento,
   debeAvisar,

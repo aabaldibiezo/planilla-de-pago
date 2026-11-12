@@ -33,15 +33,34 @@ router.post(
     body('name').trim().notEmpty().withMessage('El nombre de la empresa es requerido').isLength({
       max: 150,
     }),
-    body('contactEmail').isEmail().withMessage('Correo de contacto válido requerido'),
+    body('contactEmail')
+      .optional({ values: 'falsy' })
+      .isEmail()
+      .withMessage('Correo de contacto inválido'),
     body('contactPhone').optional({ nullable: true }).trim().isLength({ max: 30 }),
     body('taxId').optional({ nullable: true }).trim().isLength({ max: 50 }),
     body('planId').isInt({ min: 1 }).withMessage('Debe seleccionar un plan'),
-    body('adminEmail').isEmail().withMessage('Correo del administrador válido requerido'),
+    // Correo o celular del administrador: basta uno (lo valida el servicio).
+    body('adminEmail')
+      .optional({ values: 'falsy' })
+      .isEmail()
+      .withMessage('Correo del administrador inválido'),
+    body('adminPhone').optional({ values: 'falsy' }).trim().isLength({ max: 20 }),
     body('adminFirstName').trim().notEmpty().withMessage('Nombre del administrador requerido'),
     body('adminLastName').trim().notEmpty().withMessage('Apellido del administrador requerido'),
   ],
   controller.createCompany
+);
+
+// Activar o desactivar a mano (por ejemplo, por falta de pago).
+router.patch(
+  '/companies/:id/status',
+  [
+    param('id').isInt({ min: 1 }),
+    body('active').isBoolean().withMessage('Indique si la empresa queda activa'),
+    body('reason').optional().trim().isLength({ max: 500 }),
+  ],
+  controller.setCompanyActive
 );
 
 router.patch(
@@ -63,6 +82,8 @@ router.post(
     body('amountUsd').isFloat({ gt: 0 }).withMessage('El importe en USD debe ser mayor a cero'),
     body('periodMonth').isInt({ min: 1, max: 12 }).withMessage('Mes cubierto inválido'),
     body('periodYear').isInt({ min: 2020, max: 2100 }).withMessage('Año cubierto inválido'),
+    // 1 = mensual; 12 = anual, que suma 2 meses de regalo.
+    body('monthsPaid').optional().isInt({ min: 1, max: 24 }).withMessage('Meses pagados inválidos'),
     body('paidAt').optional({ nullable: true }).isISO8601(),
     body('notes').optional({ nullable: true }).trim().isLength({ max: 1000 }),
   ],

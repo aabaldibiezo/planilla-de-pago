@@ -139,6 +139,11 @@
         empresa: (id) => pedir(`/platform/companies/${id}`),
         crearEmpresa: (datos) =>
             pedir('/platform/companies', { method: 'POST', body: JSON.stringify(datos) }),
+        cambiarAcceso: (id, active) =>
+            pedir(`/platform/companies/${id}/status`, {
+                method: 'PATCH',
+                body: JSON.stringify({ active }),
+            }),
         cambiarPlan: (id, planId, reason) =>
             pedir(`/platform/companies/${id}/plan`, {
                 method: 'PATCH',

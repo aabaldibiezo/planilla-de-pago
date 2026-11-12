@@ -3,7 +3,7 @@ const platform = require('../services/platform.service');
 const audit = require('../services/audit.service');
 
 /** Errores de dominio que corresponden a un 400 y no a un fallo del servidor. */
-const CLIENT_ERROR_PATTERN = /no encontrad|ya está registrado|no existe|inactivo/i;
+const CLIENT_ERROR_PATTERN = /no encontrad|ya está registrado|no existe|inactivo|indique|debe tener/i;
 
 const handle = (fn) => async (req, res, next) => {
   try {
@@ -44,6 +44,18 @@ exports.createCompany = handle(async (req) => {
   return empresa;
 });
 
+
+exports.setCompanyActive = handle(async (req) => {
+  const empresa = await platform.setCompanyActive(req.params.id, req.body.active, req.user.id);
+  await audit.record(req, {
+    action: empresa.isActive ? 'ACTIVATE' : 'DEACTIVATE',
+    entity: 'Company',
+    entityId: empresa.id,
+    reason: req.body.reason,
+    newData: { isActive: empresa.isActive },
+  });
+  return empresa;
+});
 exports.changePlan = handle(async (req) => {
   const empresa = await platform.changePlan(req.params.id, req.body.planId, req.user.id);
   await audit.record(req, {

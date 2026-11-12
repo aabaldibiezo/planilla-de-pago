@@ -8,6 +8,8 @@ const {
   diasHastaVencimiento,
   debeAvisar,
   etiquetaDeEstado,
+  mesesCubiertos,
+  vencimientoTrasPago,
 } = require('../src/lib/subscription');
 
 const fecha = (iso) => new Date(`${iso}T00:00:00.000Z`);
@@ -123,4 +125,42 @@ test('deriva la etiqueta que muestra el panel', () => {
   assert.equal(etiquetaDeEstado(empresa(), fecha('2026-05-01')), 'ACTIVA');
   assert.equal(etiquetaDeEstado(empresa(), fecha('2026-05-09')), 'POR_VENCER');
   assert.equal(etiquetaDeEstado(empresa({ status: 'READ_ONLY' }), fecha('2026-05-01')), 'SUSPENDIDA');
+});
+
+// --------------- Pago de varios meses y regalo anual ---------------
+
+test('un pago mensual cubre un mes y no tiene regalo', () => {
+  assert.deepEqual(mesesCubiertos(1), { pagados: 1, regalo: 0, total: 1 });
+});
+
+test('el pago anual suma 2 meses de regalo', () => {
+  assert.deepEqual(mesesCubiertos(12), { pagados: 12, regalo: 2, total: 14 });
+});
+
+test('menos de 12 meses no tiene regalo', () => {
+  assert.deepEqual(mesesCubiertos(6), { pagados: 6, regalo: 0, total: 6 });
+});
+
+test('un valor inválido cuenta como un mes', () => {
+  assert.deepEqual(mesesCubiertos('x'), { pagados: 1, regalo: 0, total: 1 });
+});
+
+test('el pago anual al día corre el vencimiento 14 meses', () => {
+  assert.equal(
+    iso(vencimientoTrasPago(fecha('2026-12-05'), fecha('2026-12-01'), 14)),
+    '2028-02-05'
+  );
+});
+
+test('un pago de un mes equivale al cálculo normal', () => {
+  assert.equal(
+    iso(vencimientoTrasPago(fecha('2026-12-05'), fecha('2026-12-01'), 1)),
+    iso(proximoVencimiento(fecha('2026-12-05'), fecha('2026-12-01')))
+  );
+});
+
+test('una empresa desactivada a mano se marca DESACTIVADA y no recibe aviso', () => {
+  const empresa = { isActive: false, status: 'ACTIVE', nextDueDate: fecha('2026-12-02') };
+  assert.equal(etiquetaDeEstado(empresa, fecha('2026-12-01')), 'DESACTIVADA');
+  assert.equal(debeAvisar(empresa, fecha('2026-12-01')), false);
 });

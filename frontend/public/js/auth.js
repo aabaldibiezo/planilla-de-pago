@@ -66,6 +66,14 @@ class AuthManager {
             }
         }
 
+        this.mustChangePassword = Boolean(resData.mustChangePassword ?? user.mustChangePassword);
+
+        // El dueño de la plataforma no tiene empresa: va a su propio panel.
+        if (user.role === 'SUPER_ADMIN') {
+            this.irAPlataforma(token, { ...user, mustChangePassword: this.mustChangePassword });
+            return user;
+        }
+
         this.user = user;
         localStorage.setItem('user', JSON.stringify(user));
         localStorage.setItem('token', token);
@@ -76,6 +84,24 @@ class AuthManager {
 
         this.showApp();
         return user;
+    }
+
+    /**
+     * Pasa la sesión al panel de plataforma (empresas, planes y cobros), que
+     * guarda su propia sesión con otras claves.
+     */
+    irAPlataforma(token, user) {
+        localStorage.setItem('plataforma_token', token);
+        localStorage.setItem('plataforma_usuario', JSON.stringify(user));
+        localStorage.removeItem('user');
+        localStorage.removeItem('token');
+        window.api.clearToken();
+        window.location.href = 'plataforma/';
+    }
+
+    /** Sesión vieja de súper administrador abierta en este panel. */
+    esSuperAdmin() {
+        return Boolean(this.user && this.user.role === 'SUPER_ADMIN');
     }
 
     /**

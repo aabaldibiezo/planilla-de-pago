@@ -135,7 +135,7 @@ model Company {
   id           Int     @id @default(autoincrement())
   name         String
   taxId        String?
-  contactEmail String
+  contactEmail String?
   contactPhone String?
   planId       Int
   plan         Plan    @relation(fields: [planId], references: [id])
@@ -179,6 +179,10 @@ model SubscriptionPayment {
   /// Mes de suscripción que cubre este pago (1-12 y año).
   periodMonth Int
   periodYear  Int
+  /// Meses pagados y de regalo (el pago anual: 12 + 2). El periodo de arriba
+  /// es el primer mes que cubre.
+  monthsPaid  Int      @default(1)
+  bonusMonths Int      @default(0)
 
   /// Instantánea del plan al momento del cobro: si mañana cambia el precio o
   /// el nombre del plan, el historial debe seguir mostrando lo que se cobró.

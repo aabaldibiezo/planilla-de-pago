@@ -15,6 +15,9 @@ const login = async (req, res, next) => {
 
     res.json({ success: true, data: result });
   } catch (error) {
+    if (error.code === 'COMPANY_INACTIVE') {
+      return res.status(403).json({ success: false, error: error.message, code: error.code });
+    }
     if (error.message === 'Credenciales inválidas') {
       return res.status(401).json({ success: false, error: error.message });
     }

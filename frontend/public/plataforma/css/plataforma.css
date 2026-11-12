@@ -9,13 +9,13 @@
 
 :root {
   /* Marca de plataforma */
-  --pl-brand: #0f766e;
-  --pl-brand-strong: #115e59;
-  --pl-brand-soft: #ccfbf1;
+  --pl-brand: #0369a1;
+  --pl-brand-strong: #075985;
+  --pl-brand-soft: #e0f2fe;
   --pl-brand-contrast: #ffffff;
 
   /* Superficies */
-  --pl-bg: #f1f5f9;
+  --pl-bg: #eef7fd;
   --pl-surface: #ffffff;
   --pl-surface-alt: #f8fafc;
   --pl-border: #e2e8f0;
@@ -776,4 +776,63 @@ tbody tr:hover {
   .campo-doble {
     grid-template-columns: 1fr;
   }
+}
+
+/* ---------- Empresa desactivada a mano ---------- */
+.estado-desactivada {
+  background: var(--pl-surface-alt);
+  color: var(--pl-text-soft);
+  border: 1px solid var(--pl-border-strong);
+}
+
+.fila-desactivada td {
+  opacity: 0.65;
+}
+
+.fila-desactivada td:first-child {
+  box-shadow: inset 3px 0 0 var(--pl-text-muted);
+}
+
+.zona-cuenta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--pl-border);
+  border-radius: var(--pl-radius);
+  background: var(--pl-surface-alt);
+}
+
+.boton-peligro {
+  background: var(--pl-danger);
+  color: #fff;
+  border: 1px solid var(--pl-danger);
+}
+
+.boton-peligro:hover {
+  filter: brightness(0.92);
+}
+
+.resumen-pago {
+  margin: 4px 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--pl-brand-soft);
+  color: var(--pl-brand-strong);
+  font-weight: 600;
+}
+
+/* Contraseña temporal para pasar por WhatsApp cuando no hay correo. */
+.clave-temporal {
+  margin: 12px 0;
+  padding: 14px;
+  border-radius: var(--pl-radius);
+  border: 2px dashed var(--pl-brand);
+  background: var(--pl-brand-soft);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-align: center;
+  color: var(--pl-brand-strong);
 }

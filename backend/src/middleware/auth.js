@@ -180,7 +180,7 @@ const enforceCompanyStatus = async (req, res, next) => {
     if (!company || !company.isActive) {
       return res.status(403).json({
         success: false,
-        error: 'La cuenta de su empresa está desactivada',
+        error: 'El acceso de su empresa está suspendido. Comuníquese con el proveedor del sistema.',
         code: 'COMPANY_INACTIVE',
       });
     }

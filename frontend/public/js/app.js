@@ -12,6 +12,10 @@ class Application {
         this.setupModal();
 
         // Verificar si ya está autenticado
+        if (window.auth && window.auth.isAuthenticated() && window.auth.esSuperAdmin()) {
+            window.auth.irAPlataforma(window.auth.token, window.auth.user);
+            return;
+        }
         if (window.auth && window.auth.isAuthenticated()) {
             window.auth.showApp();
             this.navigateTo('dashboard');
