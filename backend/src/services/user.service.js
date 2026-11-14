@@ -7,6 +7,7 @@ const emailService = require('./email.service');
 const { generateTemporaryPassword, assertPasswordStrength } = require('../lib/credentials');
 const { scope } = require('../lib/tenant');
 const { normalizePhone, isValidPhone } = require('../lib/contact');
+const { filtroDeVisibles, assertPuedeCrear, assertPuedeGestionar } = require('../lib/admin-access');
 
 /** Campos expuestos por la API; nunca incluye el hash de la contraseña. */
 const PUBLIC_FIELDS = {
@@ -17,6 +18,7 @@ const PUBLIC_FIELDS = {
   lastName: true,
   phone: true,
   role: true,
+  isOwner: true,
   employeeType: true,
   staffCategory: true,
   monthlySalary: true,
@@ -89,10 +91,9 @@ const getAll = async (requestingUser) => {
   const companyId = requestingUser.companyId;
 
   return prisma.user.findMany({
-    where:
-      requestingUser?.role === 'ADMIN'
-        ? { ...scope('user', companyId), isActive: true }
-        : { ...scope('user', companyId), id: requestingUser.id, isActive: true },
+    // Un administrador común no ve a los demás administradores; el gerente
+    // general (dueño) ve a todos. Ver lib/admin-access.
+    where: { ...scope('user', companyId), isActive: true, ...filtroDeVisibles(requestingUser) },
     select: {
       ...PUBLIC_FIELDS,
       scheduleBlocks: {
@@ -112,7 +113,9 @@ const getAll = async (requestingUser) => {
  * transacción: un fallo de SMTP no debe impedir el alta del empleado, queda
  * registrado en `credentialsError` y el administrador puede reenviarla.
  */
-const create = async (companyId, data, actorId) => {
+const create = async (companyId, data, actorId, actor = null) => {
+  if (actor) assertPuedeCrear(actor, data.role || 'EMPLOYEE');
+
   // El fijo cobra sueldo mensual; el temporal, por día. Ver lib/pay-scheme.
   const employeeType = data.employeeType || 'FIJO';
 
@@ -242,13 +245,14 @@ const create = async (companyId, data, actorId) => {
  * Update a user.
  * Re-calculates hourlyRate if monthlySalary or monthlyHours changes.
  */
-const update = async (companyId, id, data, actorId) => {
+const update = async (companyId, id, data, actorId, actor = null) => {
   const existingUser = await prisma.user.findFirst({
     where: { id, ...scope('user', companyId) },
   });
   if (!existingUser) {
     throw new Error('Usuario no encontrado');
   }
+  if (actor) assertPuedeGestionar(actor, existingUser, { cambios: data });
 
   const updateData = {};
   if (data.email !== undefined) updateData.email = data.email;
@@ -347,13 +351,14 @@ const update = async (companyId, id, data, actorId) => {
 /**
  * Soft-delete a user by setting isActive to false.
  */
-const softDelete = async (companyId, id) => {
+const softDelete = async (companyId, id, actor = null) => {
   const existingUser = await prisma.user.findFirst({
     where: { id, ...scope('user', companyId) },
   });
   if (!existingUser) {
     throw new Error('Usuario no encontrado');
   }
+  if (actor) assertPuedeGestionar(actor, existingUser, { accion: 'desactivar' });
 
   return prisma.user.update({
     where: { id },
@@ -367,11 +372,12 @@ const softDelete = async (companyId, id) => {
  * Es la vía de recuperación cuando el empleado pierde su acceso o el
  * primer correo nunca llegó.
  */
-const resetPassword = async (companyId, id) => {
+const resetPassword = async (companyId, id, actor = null) => {
   const user = await prisma.user.findFirst({
     where: { id: Number(id), ...scope('user', companyId) },
   });
   if (!user) throw new Error('Usuario no encontrado');
+  if (actor) assertPuedeGestionar(actor, user, { accion: 'restablecer' });
   if (!user.isActive) throw new Error('No se puede restablecer el acceso de un usuario inactivo');
   if (!user.email && !user.phone) {
     throw new Error('Este empleado no tiene correo ni celular: no usa la aplicación');

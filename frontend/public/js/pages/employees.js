@@ -148,17 +148,26 @@ window.EmployeesPage = {
                         ? '<span class="badge badge-success">Activo</span>'
                         : '<span class="badge badge-danger">Inactivo</span>';
 
+                    // La cuenta propia y la del gerente general no se desactivan
+                    // desde acá (el servidor también lo impide).
+                    const yo = window.auth?.getUser?.() || {};
+                    const puedeDesactivar = !user.isOwner && user.id !== yo.id;
+
                     let actionBtns = '';
                     if (user.isActive) {
                         actionBtns = `
                         <div class="flex-end gap-1">
                             <button class="btn-secondary btn-sm" data-employee-action="edit" data-user-id="${user.id}">📝 Editar</button>
                             ${
-                                user.email || user.phone
+                                (user.email || user.phone) && user.id !== yo.id
                                     ? `<button class="btn-secondary btn-sm" data-employee-action="reset-password" data-user-id="${user.id}" title="Genera una contraseña temporal y la envía por correo">🔑 Acceso</button>`
                                     : ''
                             }
-                            <button class="btn-danger btn-sm" data-employee-action="deactivate" data-user-id="${user.id}">✗ Desact.</button>
+                            ${
+                                puedeDesactivar
+                                    ? `<button class="btn-danger btn-sm" data-employee-action="deactivate" data-user-id="${user.id}">✗ Desact.</button>`
+                                    : ''
+                            }
                         </div>
                     `;
                     } else {
@@ -177,8 +186,10 @@ window.EmployeesPage = {
                         ? '-'
                         : `${window.App.formatCurrency(hourlyRate)}/h`;
                     const entryDisp = isUserAdmin ? '-' : `${user.scheduledEntryTime}`;
-                    const typeDisp = isUserAdmin
-                        ? '<span class="badge badge-info">Admin</span>'
+                    const typeDisp = user.isOwner
+                        ? '<span class="badge badge-info">Gerente general</span>'
+                        : isUserAdmin
+                        ? '<span class="badge badge-info">Administrador</span>'
                         : `<span class="badge badge-secondary">${this.esc(typeLabels[user.employeeType] || user.employeeType)}</span>`;
 
                     // Con geocerco estricto, sin sede asignada no puede fichar.
@@ -436,15 +447,31 @@ window.EmployeesPage = {
             </div>
         `;
 
+        // Solo el gerente general (dueño) crea o asciende administradores. El
+        // rol del gerente general, y el de un administrador visto por sí mismo,
+        // no se cambia desde acá.
+        const soyDueno = Boolean(window.auth?.getUser?.()?.isOwner);
+        const puedeElegirAdmin = soyDueno || (isEdit && user.role === 'ADMIN');
+        const rolBloqueado = isEdit && (user.isOwner || (user.role === 'ADMIN' && !soyDueno));
+
         // --- Paso 2: condiciones de contratación y pago ---
         const paso2 = `
             <div class="flex gap-2 flex-wrap">
                 <div class="form-group flex-1">
                     <label for="emp-role">Rol en el sistema</label>
-                    <select id="emp-role" class="form-control" required>
+                    <select id="emp-role" class="form-control" required ${rolBloqueado ? 'disabled' : ''}>
                         <option value="EMPLOYEE" ${isEdit && user.role === 'EMPLOYEE' ? 'selected' : ''}>Empleado</option>
-                        <option value="ADMIN" ${isEdit && user.role === 'ADMIN' ? 'selected' : ''}>Administrador</option>
+                        ${
+                            puedeElegirAdmin
+                                ? `<option value="ADMIN" ${isEdit && user.role === 'ADMIN' ? 'selected' : ''}>Administrador</option>`
+                                : ''
+                        }
                     </select>
+                    ${
+                        soyDueno || isEdit
+                            ? ''
+                            : '<small class="text-muted">Solo el gerente general puede crear administradores.</small>'
+                    }
                 </div>
                 ${
                     // Al crear, el tipo ya se eligió en "¿Fijo o Temporal?" antes de

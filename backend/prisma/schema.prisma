@@ -215,6 +215,9 @@ model User {
   /// correo, así que es único; el fijo debe tener correo o celular.
   phone               String?              @unique
   role                Role                 @default(EMPLOYEE)
+  /// Gerente general (dueño) de la empresa: la cuenta que crea el súper
+  /// administrador. Solo él ve y gestiona a los demás administradores.
+  isOwner             Boolean              @default(false)
   employeeType        EmployeeType         @default(FIJO)
   /// Clasificación contable, para separar las dos líneas de salario del
   /// estado de resultados. No se deriva de `role` ni de `employeeType`.

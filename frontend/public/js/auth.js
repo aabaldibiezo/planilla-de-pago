@@ -99,6 +99,25 @@ class AuthManager {
         window.location.href = 'plataforma/';
     }
 
+    /**
+     * Vuelve a pedir los datos del usuario al abrir el panel, para que una
+     * sesión abierta de antes reciba cambios de permisos (p. ej. gerente
+     * general) sin tener que salir y volver a entrar.
+     */
+    async refreshUser() {
+        try {
+            const res = await window.api.getMe();
+            const fresh = res.data || res;
+            if (fresh && fresh.id) {
+                this.user = { ...this.user, ...fresh };
+                localStorage.setItem('user', JSON.stringify(this.user));
+            }
+        } catch {
+            // Sin conexión o sesión vencida: se sigue con lo guardado.
+        }
+        return this.user;
+    }
+
     /** Sesión vieja de súper administrador abierta en este panel. */
     esSuperAdmin() {
         return Boolean(this.user && this.user.role === 'SUPER_ADMIN');

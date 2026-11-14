@@ -23,7 +23,8 @@ const create = async (req, res, next) => {
     const { temporaryPassword, ...user } = await userService.create(
       req.user.companyId,
       req.body,
-      req.user.id
+      req.user.id,
+      req.user
     );
     await auditService.record(req, {
       action: 'CREATE',
@@ -34,6 +35,10 @@ const create = async (req, res, next) => {
     });
     res.status(201).json({ success: true, data: { ...user, temporaryPassword } });
   } catch (error) {
+    // Gestionar administradores es exclusivo del gerente general.
+    if (error.name === 'AdminAccessError') {
+      return res.status(403).json({ success: false, error: error.message, code: error.code });
+    }
     if (/ya está registrado/.test(error.message)) {
       return res.status(409).json({ success: false, error: error.message });
     }
@@ -60,7 +65,7 @@ const update = async (req, res, next) => {
       return res.status(400).json({ success: false, error: 'ID inválido' });
     }
 
-    const user = await userService.update(req.user.companyId, id, req.body, req.user.id);
+    const user = await userService.update(req.user.companyId, id, req.body, req.user.id, req.user);
     await auditService.record(req, {
       action: 'UPDATE',
       entity: 'User',
@@ -70,6 +75,10 @@ const update = async (req, res, next) => {
     });
     res.json({ success: true, data: user });
   } catch (error) {
+    // Gestionar administradores es exclusivo del gerente general.
+    if (error.name === 'AdminAccessError') {
+      return res.status(403).json({ success: false, error: error.message, code: error.code });
+    }
     if (error.message === 'Usuario no encontrado') {
       return res.status(404).json({ success: false, error: error.message });
     }
@@ -94,7 +103,7 @@ const remove = async (req, res, next) => {
       return res.status(400).json({ success: false, error: 'ID inválido' });
     }
 
-    const user = await userService.softDelete(req.user.companyId, id);
+    const user = await userService.softDelete(req.user.companyId, id, req.user);
     await auditService.record(req, {
       action: 'DEACTIVATE',
       entity: 'User',
@@ -104,6 +113,10 @@ const remove = async (req, res, next) => {
     });
     res.json({ success: true, data: { message: 'Usuario desactivado correctamente' } });
   } catch (error) {
+    // Gestionar administradores es exclusivo del gerente general.
+    if (error.name === 'AdminAccessError') {
+      return res.status(403).json({ success: false, error: error.message, code: error.code });
+    }
     if (error.message === 'Usuario no encontrado') {
       return res.status(404).json({ success: false, error: error.message });
     }
@@ -122,7 +135,7 @@ const resetPassword = async (req, res, next) => {
       return res.status(400).json({ success: false, error: 'ID inválido' });
     }
 
-    const user = await userService.resetPassword(req.user.companyId, id);
+    const user = await userService.resetPassword(req.user.companyId, id, req.user);
     await auditService.record(req, {
       action: 'RESET_PASSWORD',
       entity: 'User',
@@ -133,6 +146,10 @@ const resetPassword = async (req, res, next) => {
 
     res.json({ success: true, data: user });
   } catch (error) {
+    // Gestionar administradores es exclusivo del gerente general.
+    if (error.name === 'AdminAccessError') {
+      return res.status(403).json({ success: false, error: error.message, code: error.code });
+    }
     if (error.message === 'Usuario no encontrado') {
       return res.status(404).json({ success: false, error: error.message });
     }

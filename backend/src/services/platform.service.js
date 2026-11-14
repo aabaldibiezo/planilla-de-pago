@@ -159,6 +159,8 @@ const createCompany = async (data, actorId) => {
         firstName: data.adminFirstName,
         lastName: data.adminLastName,
         role: 'ADMIN',
+        // La cuenta que crea el súper administrador es el gerente general.
+        isOwner: true,
         // El administrador de la empresa no cobra sueldo por este sistema.
         monthlySalary: 0,
         monthlyHours: 160,

@@ -19,6 +19,8 @@ class Application {
         if (window.auth && window.auth.isAuthenticated()) {
             window.auth.showApp();
             this.navigateTo('dashboard');
+            // En segundo plano: trae permisos actualizados (gerente general).
+            window.auth.refreshUser();
         } else {
             if (window.auth) {
                 window.auth.showLogin();
