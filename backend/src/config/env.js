@@ -31,11 +31,17 @@ const validateEnvironment = () => {
     throw new Error(`Variables de entorno requeridas: ${missing.join(', ')}`);
   }
   if (process.env.NODE_ENV === 'production') {
-    const sinCorreo = optionalInProduction.filter((name) => !process.env[name]);
-    if (sinCorreo.length) {
+    // Basta con Brevo (API por HTTPS) o con SMTP completo; EMAIL_FROM es opcional.
+    const conBrevo = Boolean(process.env.BREVO_API_KEY);
+    const conSmtp = optionalInProduction
+      .filter((name) => name === 'SMTP_USER' || name === 'SMTP_PASS')
+      .every((name) => process.env[name]);
+    if (!conBrevo && !conSmtp) {
       console.warn(
-        `Correo sin configurar (${sinCorreo.join(', ')}): las claves nuevas se muestran en el panel.`
+        'Correo sin configurar (BREVO_API_KEY o SMTP_USER/SMTP_PASS): las claves nuevas se muestran en el panel.'
       );
+    } else {
+      console.log(`Correo: se envía por ${conBrevo ? 'Brevo (API)' : 'SMTP'}.`);
     }
   }
   if (

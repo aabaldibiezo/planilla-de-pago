@@ -31,7 +31,7 @@ window.EmployeesPage = {
             <!-- Employees Table -->
             <div class="card">
                 <div class="table-container">
-                    <table class="table">
+                    <table class="table tabla-acciones-fijas">
                         <thead>
                             <tr>
                                 <th>Nombre</th>

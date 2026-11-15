@@ -1,5 +1,70 @@
 const nodemailer = require('nodemailer');
 
+/** Tope de espera de un envío: pasado esto se da por fallido. */
+const TIEMPO_MAXIMO_MS = 15000;
+
+const BREVO_URL = 'https://api.brevo.com/v3/smtp/email';
+
+/**
+ * Remitente "Nombre <correo>" → { name, email }. Acepta también un correo solo.
+ */
+const separarRemitente = (valor, nombrePorDefecto = 'Planilla de Pago') => {
+  const texto = String(valor || '').trim();
+  const conNombre = texto.match(/^"?([^"<]*?)"?\s*<([^>]+)>$/);
+  if (conNombre) return { name: conNombre[1].trim() || nombrePorDefecto, email: conNombre[2].trim() };
+  return { name: nombrePorDefecto, email: texto };
+};
+
+/**
+ * Cuerpo para la API de Brevo. Puro, para poder probarlo sin red.
+ * Brevo envía por HTTPS, así que funciona donde el SMTP está bloqueado.
+ */
+const armarCuerpoBrevo = ({ to, subject, text, html }, remitente) => ({
+  sender: remitente,
+  to: [{ email: to }],
+  subject,
+  textContent: text,
+  ...(html ? { htmlContent: html } : {}),
+});
+
+/** Envío por la API de Brevo. Mismo contrato que `send`: nunca lanza. */
+const enviarPorBrevo = async (mailOptions, recipient) => {
+  const remitente = separarRemitente(
+    process.env.EMAIL_FROM || process.env.BREVO_SENDER || process.env.SMTP_USER
+  );
+  if (!remitente.email) {
+    const error = 'Falta el correo remitente (EMAIL_FROM o SMTP_USER) para Brevo';
+    console.warn(`⚠️ ${error}. Se omitió el envío a ${recipient}.`);
+    return { success: false, error };
+  }
+
+  try {
+    const respuesta = await fetch(BREVO_URL, {
+      method: 'POST',
+      headers: {
+        'api-key': process.env.BREVO_API_KEY,
+        'content-type': 'application/json',
+        accept: 'application/json',
+      },
+      body: JSON.stringify(armarCuerpoBrevo(mailOptions, remitente)),
+      signal: globalThis.AbortSignal.timeout(TIEMPO_MAXIMO_MS),
+    });
+    const cuerpo = await respuesta.json().catch(() => ({}));
+    if (!respuesta.ok) {
+      const error = cuerpo.message || `Brevo respondió ${respuesta.status}`;
+      console.error(`❌ Falló el envío a ${recipient} por Brevo: ${error}`);
+      return { success: false, error };
+    }
+    console.log(`✉️ Correo enviado a ${recipient} por Brevo. MessageId: ${cuerpo.messageId}`);
+    return { success: true };
+  } catch (fallo) {
+    const error =
+      fallo.name === 'TimeoutError' ? 'Brevo no respondió a tiempo' : fallo.message || String(fallo);
+    console.error(`❌ Falló el envío a ${recipient} por Brevo: ${error}`);
+    return { success: false, error };
+  }
+};
+
 /**
  * Construye el transporte SMTP. Devuelve `null` (con el motivo) cuando la
  * configuración falta o conserva los valores de ejemplo del archivo .env.
@@ -28,6 +93,11 @@ const buildTransport = () => {
     secure: port === 465,
     auth: { user: userEmail, pass: password },
     tls: { rejectUnauthorized: process.env.SMTP_REJECT_UNAUTHORIZED !== 'false' },
+    // Si el puerto está bloqueado (Render gratis bloquea SMTP), se corta
+    // rápido en vez de dejar la pantalla "Enviando…" colgada dos minutos.
+    connectionTimeout: TIEMPO_MAXIMO_MS,
+    greetingTimeout: TIEMPO_MAXIMO_MS,
+    socketTimeout: TIEMPO_MAXIMO_MS,
   });
 
   const from =
@@ -41,6 +111,9 @@ const buildTransport = () => {
  * Nunca lanza: los llamadores deben poder continuar aunque el correo falle.
  */
 const send = async (mailOptions, recipient) => {
+  // Con clave de Brevo se envía por su API (HTTPS); si no, por SMTP.
+  if (process.env.BREVO_API_KEY) return enviarPorBrevo(mailOptions, recipient);
+
   const { transporter, from, error } = buildTransport();
 
   if (!transporter) {
@@ -187,4 +260,10 @@ El equipo de Planilla de Pago`,
   );
 };
 
-module.exports = { sendCredentialsEmail, sendSubscriptionReminderEmail };
+module.exports = {
+  sendCredentialsEmail,
+  sendSubscriptionReminderEmail,
+  // Expuestos para las pruebas.
+  separarRemitente,
+  armarCuerpoBrevo,
+};

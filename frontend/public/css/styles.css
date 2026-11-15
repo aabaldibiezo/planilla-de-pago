@@ -2930,3 +2930,19 @@ body.has-read-only-banner {
 .er-resumen-tarjeta.negativo .er-resumen-saldo strong {
   color: var(--danger);
 }
+
+/* Columna de acciones fija a la derecha: en pantallas angostas la tabla se
+   desplaza de costado y los botones (Editar, Acceso, Desact.) quedaban fuera
+   de la vista. Así siempre se ven. */
+.tabla-acciones-fijas th:last-child,
+.tabla-acciones-fijas td:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background: var(--bg-card-solid);
+  box-shadow: -8px 0 12px -10px rgba(15, 41, 66, 0.35);
+}
+
+.tabla-acciones-fijas thead th:last-child {
+  background: var(--bg-tertiary);
+}
