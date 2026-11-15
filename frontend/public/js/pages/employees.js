@@ -821,10 +821,18 @@ window.EmployeesPage = {
      */
     mostrarClaveTemporal(user, clave) {
         const usuario = user.email || user.phone;
-        const mensaje =
-            `Hola ${user.firstName}, estos son tus datos para entrar a la app de asistencia:\n` +
-            `Usuario: ${usuario}\nContraseña temporal: ${clave}\n` +
-            'Al entrar por primera vez te pedirá cambiarla.';
+        // El personal marca desde la app: el mensaje lleva el enlace de descarga.
+        const esEmpleado = user.role !== 'ADMIN';
+        const descarga = `${window.location.origin}/descargar/`;
+        const mensaje = esEmpleado
+            ? `Hola ${user.firstName}, ya tenés tu acceso a la app de asistencia.\n\n` +
+              `1. Descargá la app: ${descarga}\n` +
+              `2. Entrá con:\nUsuario: ${usuario}\nContraseña temporal: ${clave}\n\n` +
+              'Al entrar por primera vez te pedirá elegir tu propia contraseña.'
+            : `Hola ${user.firstName}, estos son tus datos para entrar al sistema:\n` +
+              `${window.location.origin}\n` +
+              `Usuario: ${usuario}\nContraseña temporal: ${clave}\n` +
+              'Al entrar por primera vez te pedirá cambiarla.';
 
         window.App.showModal(
             'Entregue estos datos al empleado',
@@ -839,7 +847,14 @@ window.EmployeesPage = {
                     <div class="mt-2"><span class="text-muted">Contraseña temporal</span><br>
                         <strong class="clave-temporal-valor">${this.esc(clave)}</strong></div>
                 </div>
-                <div class="flex-end gap-2 mt-4">
+                ${
+                    esEmpleado
+                        ? `<p class="text-muted text-sm mt-3">El mensaje incluye el enlace para descargar la app: <strong>${this.esc(descarga)}</strong></p>`
+                        : ''
+                }
+                <div class="flex-end gap-2 mt-4 flex-wrap">
+                    <a class="btn-secondary" id="btn-whatsapp-clave" target="_blank" rel="noopener"
+                       href="https://wa.me/?text=${encodeURIComponent(mensaje)}">💬 Enviar por WhatsApp</a>
                     <button class="btn-secondary" id="btn-copiar-clave">📋 Copiar mensaje</button>
                     <button class="btn-primary" id="btn-cerrar-clave">Listo</button>
                 </div>

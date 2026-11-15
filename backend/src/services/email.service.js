@@ -64,27 +64,86 @@ const send = async (mailOptions, recipient) => {
  * La contraseña viaja en el cuerpo del correo porque es de un solo uso: el
  * sistema obliga a cambiarla en el primer inicio de sesión.
  */
+/** Escapa texto para meterlo en el HTML del correo. */
+const html = (valor) =>
+  String(valor ?? '').replace(
+    /[&<>'"]/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[c]
+  );
+
 const sendCredentialsEmail = async (user, temporaryPassword, appUrl) => {
-  const accessLine = appUrl ? `\nIngrese desde: ${appUrl}\n` : '';
+  // El personal marca desde la app; el administrador entra al panel web.
+  const esEmpleado = user.role === 'EMPLOYEE';
+  const base = appUrl ? appUrl.replace(/\/$/, '') : '';
+  const descarga = base ? `${base}/descargar/` : '';
 
-  return send(
-    {
-      to: user.email,
-      subject: 'Sus credenciales de acceso - Planilla de Pago',
-      text: `Hola ${user.firstName},
+  const pasoAcceso = esEmpleado
+    ? descarga
+      ? `1. Descargue la app en su celular Android:\n   ${descarga}\n2. Ábrala e ingrese con estos datos:`
+      : 'Ingrese a la app con estos datos:'
+    : base
+      ? `Ingrese desde: ${base}`
+      : 'Ingrese al sistema con estos datos:';
 
-Se creó su acceso al sistema de asistencia y nómina.
-${accessLine}
-Usuario: ${user.email}
-Contraseña temporal: ${temporaryPassword}
+  const text = `Hola ${user.firstName},
 
-Por seguridad, el sistema le pedirá cambiar esta contraseña la primera vez que ingrese.
+Se creó su acceso al sistema de ${esEmpleado ? 'asistencia' : 'asistencia y planillas'}.
+
+${pasoAcceso}
+   Usuario: ${user.email}
+   Contraseña temporal: ${temporaryPassword}
+
+Al entrar por primera vez, el sistema le pedirá elegir su propia contraseña.
 Esta contraseña temporal deja de servir apenas defina la suya.
 
 Si usted no esperaba este mensaje, avise a su supervisor.
 
 Saludos cordiales,
-El equipo de Planilla de Pago`,
+Planilla de Pago`;
+
+  const boton = esEmpleado ? descarga : base;
+  const htmlBody = `<!doctype html>
+<html lang="es"><body style="margin:0;padding:0;background:#eef7fd;font-family:Arial,Helvetica,sans-serif;color:#0f2942">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef7fd;padding:24px 12px">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden">
+        <tr><td style="background:#0369a1;padding:24px;color:#ffffff">
+          <div style="font-size:14px;opacity:.85">Planilla de Pago</div>
+          <div style="font-size:22px;font-weight:bold;margin-top:4px">¡Hola, ${html(user.firstName)}!</div>
+        </td></tr>
+        <tr><td style="padding:24px;font-size:16px;line-height:1.5">
+          <p style="margin:0 0 16px">Se creó su acceso al sistema de ${esEmpleado ? 'asistencia' : 'asistencia y planillas'}.</p>
+          ${
+            boton
+              ? `<p style="margin:0 0 8px;font-weight:bold">${esEmpleado ? '1. Descargue la app en su celular Android' : 'Ingrese al sistema'}</p>
+          <p style="margin:0 0 20px"><a href="${html(boton)}" style="display:inline-block;background:#1d4ed8;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 22px;border-radius:10px">${esEmpleado ? 'Descargar la app' : 'Abrir el sistema'}</a></p>
+          <p style="margin:0 0 8px;font-weight:bold">${esEmpleado ? '2. Ingrese con estos datos' : 'Sus datos de acceso'}</p>`
+              : '<p style="margin:0 0 8px;font-weight:bold">Sus datos de acceso</p>'
+          }
+          <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:#f0f9ff;border:1px solid #cfe6f7;border-radius:12px">
+            <tr><td style="padding:14px 16px;font-size:15px">
+              <div style="color:#6b8299;font-size:13px">Usuario</div>
+              <div style="font-weight:bold;margin-bottom:10px">${html(user.email)}</div>
+              <div style="color:#6b8299;font-size:13px">Contraseña temporal</div>
+              <div style="font-weight:bold;font-size:20px;letter-spacing:1px">${html(temporaryPassword)}</div>
+            </td></tr>
+          </table>
+          <p style="margin:16px 0 0;font-size:14px;color:#3f5f7a">Al entrar por primera vez, el sistema le pedirá elegir su propia contraseña.</p>
+        </td></tr>
+        <tr><td style="padding:16px 24px;font-size:12px;color:#6b8299;border-top:1px solid #e0f2fe">Si usted no esperaba este mensaje, avise a su supervisor.</td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+
+  return send(
+    {
+      to: user.email,
+      subject: esEmpleado
+        ? 'Su acceso a la app de asistencia'
+        : 'Sus credenciales de acceso - Planilla de Pago',
+      text,
+      html: htmlBody,
     },
     user.email
   );
