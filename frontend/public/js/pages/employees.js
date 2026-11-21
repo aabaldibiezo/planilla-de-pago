@@ -168,14 +168,27 @@ window.EmployeesPage = {
                 grupos.push({ icono: '📍', titulo: sede.name, detalle: sede.address, filas });
             });
 
-        const sinSede = personal.filter((u) => !conSede.has(u.id));
+        // Sin sede: van PRIMERO y resaltados, porque no pueden marcar hasta que
+        // se les asigne una. Los temporales no tienen sede fija (vienen el día
+        // que se los llama y los marca el encargado): van aparte, sin alerta.
+        const sinSede = personal.filter((u) => !conSede.has(u.id) && u.employeeType !== 'TEMPORAL');
         if (sinSede.length) {
-            grupos.push({
+            grupos.unshift({
                 icono: '⚠️',
                 titulo: 'Sin sede asignada',
                 clase: 'grupo-sin-sede',
-                detalle: 'Asígneles una sede para que puedan marcar asistencia',
+                claseFila: 'fila-sin-sede',
+                detalle: 'No pueden marcar asistencia hasta que les asigne una sede en "Sedes"',
                 filas: sinSede.map((user) => ({ user })),
+            });
+        }
+        const temporalesSinSede = personal.filter((u) => !conSede.has(u.id) && u.employeeType === 'TEMPORAL');
+        if (temporalesSinSede.length) {
+            grupos.push({
+                icono: '🕒',
+                titulo: 'Temporales',
+                detalle: 'Sin sede fija: el encargado de sede los marca el día que trabajan',
+                filas: temporalesSinSede.map((user) => ({ user })),
             });
         }
 
@@ -226,7 +239,7 @@ window.EmployeesPage = {
             };
 
             // `nota` va debajo del nombre (p. ej. los días que trabaja en esa sede).
-            const filaEmpleado = (user, nota = '') => {
+            const filaEmpleado = (user, nota = '', claseExtra = '') => {
                     const fullName = `${user.firstName} ${user.lastName}`;
                     const monthlySalary = parseFloat(user.monthlySalary) || 0;
                     const monthlyHours = parseFloat(user.monthlyHours) || 0;
@@ -291,7 +304,7 @@ window.EmployeesPage = {
                         : '';
 
                     return `
-                    <tr id="user-row-${user.id}" class="${!user.isActive ? 'text-muted' : ''}">
+                    <tr id="user-row-${user.id}" class="${!user.isActive ? 'text-muted' : ''} ${claseExtra}">
                         <td class="font-weight-medium">${marcaSinSede}${this.esc(fullName)}${
                             nota ? `<div class="nota-sede">${nota}</div>` : ''
                         }</td>
@@ -323,7 +336,7 @@ window.EmployeesPage = {
                     </tr>
                     ${
                         grupo.filas.length
-                            ? grupo.filas.map(({ user, nota }) => filaEmpleado(user, nota)).join('')
+                            ? grupo.filas.map(({ user, nota }) => filaEmpleado(user, nota, grupo.claseFila || '')).join('')
                             : '<tr><td colspan="9" class="text-muted text-sm fila-vacia">Todavía no hay nadie asignado a esta sede.</td></tr>'
                     }`
                 )
@@ -498,6 +511,42 @@ window.EmployeesPage = {
         });
     },
 
+    /**
+     * Asigna la sede en los días del horario del empleado, de la primera
+     * entrada a la última salida de cada día (un día con almuerzo tiene dos
+     * turnos pero es una sola asignación). Sin horario, de lunes a sábado.
+     * Devuelve cuántos días no se pudieron asignar.
+     */
+    async asignarSedeSegunHorario(userId, worksiteId, bloques = []) {
+        const porDia = new Map();
+        bloques
+            .filter((b) => b.startTime && b.endTime)
+            .forEach((b) => {
+                const dia = porDia.get(b.dayOfWeek) || { inicio: b.startTime, fin: b.endTime };
+                if (b.startTime < dia.inicio) dia.inicio = b.startTime;
+                if (b.endTime > dia.fin) dia.fin = b.endTime;
+                porDia.set(b.dayOfWeek, dia);
+            });
+
+        const dias = porDia.size
+            ? [...porDia.entries()].map(([dayOfWeek, d]) => ({
+                  dayOfWeek,
+                  startTime: d.inicio,
+                  endTime: d.fin,
+              }))
+            : [1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({ dayOfWeek }));
+
+        let fallos = 0;
+        for (const dia of dias) {
+            try {
+                await window.api.createWorksiteAssignment({ userId, worksiteId, ...dia });
+            } catch {
+                fallos += 1;
+            }
+        }
+        return fallos;
+    },
+
     openEmployeeModal(user = null) {
         const isEdit = !!user;
 
@@ -612,6 +661,22 @@ window.EmployeesPage = {
                         : '<input type="hidden" id="emp-type" value="FIJO">'
                 }
             </div>
+            ${
+                // Al crear se pregunta directamente en qué sede trabaja. Si la
+                // sede todavía no existe, se puede dejar para después: el
+                // empleado queda resaltado arriba en la lista hasta asignarlo.
+                isEdit
+                    ? ''
+                    : `<div class="form-group" id="emp-sede-grupo">
+                           <label for="emp-sede">Sede donde trabaja</label>
+                           <select id="emp-sede" class="form-control">
+                               <option value="">Cargando sedes…</option>
+                           </select>
+                           <small class="text-muted" id="emp-sede-ayuda">
+                               Se le asigna esa sede en los días de su horario (paso 3).
+                           </small>
+                       </div>`
+            }
 
             <!--
               Ni las horas del mes ni la hora de ingreso se piden: el cliente
@@ -712,6 +777,34 @@ window.EmployeesPage = {
         exigirContacto();
 
         if (porPasos) this.activarPasos();
+
+        // Sedes para el alta. Se cargan después de abrir la ventana para no
+        // demorarla; mientras tanto el campo dice "Cargando sedes…".
+        const sedeSelect = document.getElementById('emp-sede');
+        if (sedeSelect) {
+            window.api
+                .getWorksites()
+                .then((res) => {
+                    const sedes = (res.data || []).filter((s) => s.isActive !== false);
+                    sedeSelect.innerHTML = `
+                        <option value="" disabled selected>— Elegí la sede —</option>
+                        ${sedes
+                            .map((s) => `<option value="${s.id}">📍 ${this.esc(s.name)}</option>`)
+                            .join('')}
+                        <option value="DESPUES">⏳ Asignar después (la sede todavía no existe)</option>`;
+                    sedeSelect.required = !document
+                        .getElementById('emp-sede-grupo')
+                        .classList.contains('hidden');
+                    if (!sedes.length) {
+                        sedeSelect.value = 'DESPUES';
+                        document.getElementById('emp-sede-ayuda').textContent =
+                            'Todavía no hay sedes cargadas. Créela en "Sedes" y asígnelo desde ahí.';
+                    }
+                })
+                .catch(() => {
+                    sedeSelect.innerHTML = '<option value="DESPUES">⏳ Asignar después</option>';
+                });
+        }
 
         // Calculate rate preview on input change
         const salaryInput = document.getElementById('emp-salary');
@@ -855,6 +948,14 @@ window.EmployeesPage = {
         // general no figura en la planilla.
         const toggleFinancialFields = () => {
             puestoAyuda.textContent = AYUDA_PUESTO[puestoSelect.value] || '';
+            // El administrativo trabaja en la oficina: no se le pregunta sede.
+            const grupoSede = document.getElementById('emp-sede-grupo');
+            if (grupoSede) {
+                const esOficina = ['ADMINISTRATIVO', 'GERENTE'].includes(puestoSelect.value);
+                grupoSede.classList.toggle('hidden', esOficina);
+                const select = document.getElementById('emp-sede');
+                if (select && select.options.length > 1) select.required = !esOficina;
+            }
             if (puestoSelect.value === 'GERENTE') {
                 financialFields.style.opacity = '0.5';
                 salaryInput.disabled = true;
@@ -930,7 +1031,28 @@ window.EmployeesPage = {
                     window.App.showToast('Empleado actualizado correctamente', 'success');
                 } else {
                     creado = (await window.api.createUser(data)).data;
-                    window.App.showToast('Empleado creado correctamente', 'success');
+                    const sedeId = sedeSelect?.value;
+                    const asignar = data.role === 'EMPLOYEE' && sedeId && sedeId !== 'DESPUES';
+                    if (asignar) {
+                        const fallos = await this.asignarSedeSegunHorario(
+                            creado.id,
+                            Number(sedeId),
+                            data.scheduleBlocks
+                        );
+                        window.App.showToast(
+                            fallos
+                                ? `Empleado creado, pero ${fallos} día(s) no se pudieron asignar a la sede. Revíselo en "Sedes".`
+                                : 'Empleado creado y asignado a su sede',
+                            fallos ? 'warning' : 'success'
+                        );
+                    } else {
+                        window.App.showToast(
+                            data.role === 'EMPLOYEE'
+                                ? 'Empleado creado. Queda arriba en la lista hasta que le asigne una sede.'
+                                : 'Empleado creado correctamente',
+                            'success'
+                        );
+                    }
                 }
                 window.App.hideModal();
                 await this.loadEmployees();
