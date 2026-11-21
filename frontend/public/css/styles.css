@@ -2946,3 +2946,25 @@ body.has-read-only-banner {
 .tabla-acciones-fijas thead th:last-child {
   background: var(--bg-tertiary);
 }
+
+/* Botón principal para entregar el acceso por WhatsApp. */
+.btn-whatsapp {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: #16a34a;
+  color: #fff;
+  font-weight: 700;
+  text-decoration: none;
+  transition: var(--transition-fast);
+}
+
+.btn-whatsapp:hover {
+  background: #15803d;
+  color: #fff;
+}

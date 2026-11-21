@@ -824,22 +824,37 @@ window.EmployeesPage = {
         // El personal marca desde la app: el mensaje lleva el enlace de descarga.
         const esEmpleado = user.role !== 'ADMIN';
         const descarga = `${window.location.origin}/descargar/`;
+        // Formato de WhatsApp: *negrita* y emojis, parecido al correo.
         const mensaje = esEmpleado
-            ? `Hola ${user.firstName}, ya tenés tu acceso a la app de asistencia.\n\n` +
-              `1. Descargá la app: ${descarga}\n` +
-              `2. Entrá con:\nUsuario: ${usuario}\nContraseña temporal: ${clave}\n\n` +
-              'Al entrar por primera vez te pedirá elegir tu propia contraseña.'
-            : `Hola ${user.firstName}, estos son tus datos para entrar al sistema:\n` +
-              `${window.location.origin}\n` +
-              `Usuario: ${usuario}\nContraseña temporal: ${clave}\n` +
-              'Al entrar por primera vez te pedirá cambiarla.';
+            ? `👋 *¡Hola, ${user.firstName}!*\n` +
+              'Se creó tu acceso a la *app de asistencia*.\n\n' +
+              `📲 *1. Descargá la app (Android)*\n${descarga}\n\n` +
+              '🔐 *2. Entrá con estos datos*\n' +
+              `👤 Usuario: *${usuario}*\n` +
+              `🔑 Contraseña temporal: *${clave}*\n\n` +
+              '✅ Al entrar por primera vez te pedirá elegir tu propia contraseña.\n\n' +
+              '_Planilla de Pago_'
+            : `👋 *¡Hola, ${user.firstName}!*\n` +
+              'Se creó tu acceso al *sistema de planillas*.\n\n' +
+              `🌐 *Entrá desde:* ${window.location.origin}\n` +
+              `👤 Usuario: *${usuario}*\n` +
+              `🔑 Contraseña temporal: *${clave}*\n\n` +
+              '✅ Al entrar por primera vez te pedirá cambiarla.\n\n' +
+              '_Planilla de Pago_';
+
+        // Con celular, WhatsApp se abre directo en el chat del empleado (código
+        // de Bolivia 591). Sin celular, WhatsApp deja elegir el contacto.
+        const celular = String(user.phone || '').replace(/\D/g, '').replace(/^591/, '');
+        const enlaceWhatsapp = celular
+            ? `https://wa.me/591${celular}?text=${encodeURIComponent(mensaje)}`
+            : `https://wa.me/?text=${encodeURIComponent(mensaje)}`;
 
         window.App.showModal(
             'Entregue estos datos al empleado',
             `
             <div class="mt-2">
                 <p class="text-muted">
-                    ${user.email ? 'El correo no pudo enviarse, así' : 'No tiene correo, así'} que pásele estos datos en mano o por mensaje.
+                    ${user.email ? 'El correo no pudo enviarse, así' : 'No tiene correo, así'} que envíele estos datos por WhatsApp${celular ? ` a su celular <strong>${this.esc(celular)}</strong>` : ''}.
                     <strong>Anótelos ahora:</strong> la contraseña no se vuelve a mostrar.
                 </p>
                 <div class="clave-temporal mt-3">
@@ -852,9 +867,11 @@ window.EmployeesPage = {
                         ? `<p class="text-muted text-sm mt-3">El mensaje incluye el enlace para descargar la app: <strong>${this.esc(descarga)}</strong></p>`
                         : ''
                 }
-                <div class="flex-end gap-2 mt-4 flex-wrap">
-                    <a class="btn-secondary" id="btn-whatsapp-clave" target="_blank" rel="noopener"
-                       href="https://wa.me/?text=${encodeURIComponent(mensaje)}">💬 Enviar por WhatsApp</a>
+                <a class="btn-whatsapp mt-4" id="btn-whatsapp-clave" target="_blank" rel="noopener"
+                   href="${enlaceWhatsapp}">
+                    💬 ${celular ? `Enviar por WhatsApp a ${this.esc(celular)}` : 'Enviar por WhatsApp'}
+                </a>
+                <div class="flex-end gap-2 mt-3 flex-wrap">
                     <button class="btn-secondary" id="btn-copiar-clave">📋 Copiar mensaje</button>
                     <button class="btn-primary" id="btn-cerrar-clave">Listo</button>
                 </div>

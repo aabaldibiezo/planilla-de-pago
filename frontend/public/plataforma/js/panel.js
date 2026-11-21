@@ -737,6 +737,10 @@
                     `Usuario: ${usuarioAcceso}\n` +
                     `Contraseña temporal: ${creada.temporaryPassword}\n` +
                     'Al entrar le pedirá elegir una contraseña propia.';
+                // Con celular, WhatsApp abre directo el chat del administrador.
+                const celularAdmin = String(creada.admin.phone || '')
+                    .replace(/\D/g, '')
+                    .replace(/^591/, '');
                 abrirLateral(
                     'Empresa creada',
                     creada.name,
@@ -747,7 +751,10 @@
       <p class="dato-secundario">Contraseña temporal</p>
       <div class="clave-temporal">${escapar(creada.temporaryPassword)}</div>
       <a class="boton boton-primario boton-ancho" target="_blank" rel="noopener"
-         href="https://wa.me/?text=${encodeURIComponent(mensaje)}">Enviar por WhatsApp</a>
+         style="background:#16a34a;border-color:#16a34a"
+         href="https://wa.me/${celularAdmin ? `591${celularAdmin}` : ''}?text=${encodeURIComponent(mensaje)}">
+        💬 ${celularAdmin ? `Enviar por WhatsApp a ${escapar(celularAdmin)}` : 'Enviar por WhatsApp'}
+      </a>
       <button type="button" class="boton boton-secundario boton-ancho" style="margin-top:10px"
               id="btn-copiar-acceso">Copiar mensaje</button>
     `
