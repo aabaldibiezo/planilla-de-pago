@@ -715,6 +715,7 @@ window.EmployeesPage = {
 
             <div class="horario-atajos">
                 <span class="text-muted text-sm horario-atajos-titulo">1. Turno</span>
+                <button type="button" class="btn-secondary btn-sm" data-turno="08:00-22:00">☀️ Completa · 08:00 a 22:00</button>
                 <button type="button" class="btn-secondary btn-sm" data-turno="06:00-14:00">🌅 Mañana · 06:00 a 14:00</button>
                 <button type="button" class="btn-secondary btn-sm" data-turno="14:00-22:00">🌇 Tarde · 14:00 a 22:00</button>
             </div>
@@ -862,34 +863,40 @@ window.EmployeesPage = {
             blocksContainer.appendChild(row);
         };
 
-        // Un alta nueva arranca con el turno típico del personal de limpieza:
-        // de lunes a sábado, de 06:00 a 14:00. Antes traía solo el lunes y había
-        // que cargar los demás días a mano.
+        // Jornada completa = de 08:00 a 22:00. Un alta nueva arranca así, de
+        // lunes a sábado (el tipo de horario por defecto es jornada completa).
+        const JORNADA_COMPLETA = { startTime: '08:00', endTime: '22:00' };
         const initialBlocks = user?.scheduleBlocks?.length
             ? user.scheduleBlocks
-            : [1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({
-                  dayOfWeek,
-                  startTime: '06:00',
-                  endTime: '14:00',
-              }));
+            : [1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({ dayOfWeek, ...JORNADA_COMPLETA }));
         initialBlocks.forEach(addBlock);
+
+        // Pone unas horas en todos los días ya cargados, sin tocar qué días
+        // son. Si la lista está vacía, arranca de lunes a sábado.
+        const aplicarHoras = ({ startTime, endTime }) => {
+            const dias = [
+                ...new Set(
+                    [...blocksContainer.querySelectorAll('.schedule-day')].map((sel) => Number(sel.value))
+                ),
+            ];
+            blocksContainer.innerHTML = '';
+            (dias.length ? dias : [1, 2, 3, 4, 5, 6]).forEach((dayOfWeek) =>
+                addBlock({ dayOfWeek, startTime, endTime })
+            );
+        };
+
+        // Al elegir "Jornada completa" se cargan las 08:00 a 22:00.
+        scheduleType.addEventListener('change', () => {
+            if (scheduleType.value === 'FULL_TIME') aplicarHoras(JORNADA_COMPLETA);
+        });
 
         document.getElementById('add-schedule-block').addEventListener('click', () => addBlock());
 
-        // Pone las horas del turno elegido en todos los días ya cargados (sin
-        // tocar qué días son). Si la lista está vacía, arranca de lunes a sábado.
+        // Botones de turno: ponen esas horas en todos los días cargados.
         document.querySelectorAll('[data-turno]').forEach((boton) => {
             boton.addEventListener('click', () => {
                 const [startTime, endTime] = boton.dataset.turno.split('-');
-                const dias = [
-                    ...new Set(
-                        [...blocksContainer.querySelectorAll('.schedule-day')].map((sel) => Number(sel.value))
-                    ),
-                ];
-                blocksContainer.innerHTML = '';
-                (dias.length ? dias : [1, 2, 3, 4, 5, 6]).forEach((dayOfWeek) =>
-                    addBlock({ dayOfWeek, startTime, endTime })
-                );
+                aplicarHoras({ startTime, endTime });
             });
         });
 
