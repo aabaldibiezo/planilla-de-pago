@@ -752,7 +752,11 @@
       <div class="clave-temporal">${escapar(creada.temporaryPassword)}</div>
       <a class="boton boton-primario boton-ancho" target="_blank" rel="noopener"
          style="background:#16a34a;border-color:#16a34a"
-         href="https://wa.me/${celularAdmin ? `591${celularAdmin}` : ''}?text=${encodeURIComponent(mensaje)}">
+         href="${
+             /Android|iPhone|iPad|iPod/i.test(window.navigator.userAgent)
+                 ? `https://wa.me/${celularAdmin ? `591${celularAdmin}` : ''}?text=${encodeURIComponent(mensaje)}`
+                 : `https://web.whatsapp.com/send?${celularAdmin ? `phone=591${celularAdmin}&` : ''}text=${encodeURIComponent(mensaje)}`
+         }">
         💬 ${celularAdmin ? `Enviar por WhatsApp a ${escapar(celularAdmin)}` : 'Enviar por WhatsApp'}
       </a>
       <button type="button" class="boton boton-secundario boton-ancho" style="margin-top:10px"

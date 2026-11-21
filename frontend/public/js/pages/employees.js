@@ -845,9 +845,13 @@ window.EmployeesPage = {
         // Con celular, WhatsApp se abre directo en el chat del empleado (código
         // de Bolivia 591). Sin celular, WhatsApp deja elegir el contacto.
         const celular = String(user.phone || '').replace(/\D/g, '').replace(/^591/, '');
-        const enlaceWhatsapp = celular
-            ? `https://wa.me/591${celular}?text=${encodeURIComponent(mensaje)}`
-            : `https://wa.me/?text=${encodeURIComponent(mensaje)}`;
+        // En computadora se abre WhatsApp Web en otra pestaña, directo en el
+        // chat; en el celular, la app de WhatsApp.
+        const esCelular = /Android|iPhone|iPad|iPod/i.test(window.navigator.userAgent);
+        const texto = encodeURIComponent(mensaje);
+        const enlaceWhatsapp = esCelular
+            ? `https://wa.me/${celular ? `591${celular}` : ''}?text=${texto}`
+            : `https://web.whatsapp.com/send?${celular ? `phone=591${celular}&` : ''}text=${texto}`;
 
         window.App.showModal(
             'Entregue estos datos al empleado',
