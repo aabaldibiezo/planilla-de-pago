@@ -302,7 +302,8 @@ window.WorkforcePage = {
                     .join(
                         ''
                     )}</select></div><div class="form-group flex-1"><label>Multiplicador *</label><input id="ot-multiplier" class="form-control" type="number" min="0.01" step="0.01" value="${Number(row?.multiplier || 1)}" required></div></div>
-                <div class="form-group"><label>Monto fijo (solo si corresponde)</label><input id="ot-fixed" class="form-control" type="number" min="0" step="0.01" value="${row?.fixedAmount == null ? '' : Number(row.fixedAmount)}"></div>
+                <div class="form-group" id="ot-fixed-grupo"><label>Monto fijo (Bs.)</label><input id="ot-fixed" class="form-control" type="number" min="0" step="0.01" value="${row?.fixedAmount == null ? '' : Number(row.fixedAmount)}"></div>
+                <div class="estimado-pago" id="ot-estimado" aria-live="polite"></div>
                 <div class="form-group"><label>Motivo *</label><input id="ot-reason" class="form-control" maxlength="250" value="${this.esc(row?.reason || '')}" required></div>
                 <div class="form-group"><label>Observaciones</label><textarea id="ot-notes" class="form-control" maxlength="1000" rows="3">${this.esc(row?.notes || '')}</textarea></div>
                 <div class="flex-end gap-1"><button type="button" class="btn-secondary" id="ot-cancel">Cancelar</button><button class="btn-primary" type="submit">Guardar</button></div>
@@ -317,11 +318,73 @@ window.WorkforcePage = {
             if (minutes <= 0) minutes += 1440;
 
             document.getElementById('ot-hours').value = (minutes / 60).toFixed(2);
+            actualizarEstimado();
+        };
+
+        // Multiplicador sugerido por tipo, para que no choque con las reglas
+        // del servidor (tarifa normal = 1, reducida < 1, incrementada > 1).
+        const SUGERIDO = { SAME_RATE: 1, LOWER_RATE: 0.5, HIGHER_RATE: 1.5, MULTIPLIER: 2 };
+        const modo = document.getElementById('ot-mode');
+        const multiplicador = document.getElementById('ot-multiplier');
+        const ajustarPorTipo = () => {
+            const m = Number(multiplicador.value);
+            const tipo = modo.value;
+            if (tipo === 'SAME_RATE') multiplicador.value = 1;
+            if (tipo === 'LOWER_RATE' && !(m > 0 && m < 1)) multiplicador.value = SUGERIDO.LOWER_RATE;
+            if (tipo === 'HIGHER_RATE' && !(m > 1)) multiplicador.value = SUGERIDO.HIGHER_RATE;
+            if (tipo === 'MULTIPLIER' && !(m > 0)) multiplicador.value = SUGERIDO.MULTIPLIER;
+            const usaMultiplicador = ['LOWER_RATE', 'HIGHER_RATE', 'MULTIPLIER'].includes(tipo);
+            multiplicador.disabled = !usaMultiplicador;
+            multiplicador.closest('.form-group').style.opacity = usaMultiplicador ? '1' : '0.5';
+            document.getElementById('ot-fixed-grupo').classList.toggle('hidden', tipo !== 'FIXED_AMOUNT');
+            document.getElementById('ot-fixed').required = tipo === 'FIXED_AMOUNT';
+        };
+
+        // Estimado de lo que se va a pagar, con la misma fórmula del servidor:
+        // horas × valor de la hora × multiplicador (o el monto fijo).
+        const actualizarEstimado = () => {
+            const caja = document.getElementById('ot-estimado');
+            const empleado = this.users.find((u) => u.id === Number(document.getElementById('ot-user').value));
+            const horas = Number(document.getElementById('ot-hours').value) || 0;
+            const tipo = modo.value;
+            const m = Number(multiplicador.value) || 0;
+
+            if (!empleado) {
+                caja.innerHTML = '<span class="text-muted">Elija el empleado para ver cuánto se le pagará.</span>';
+                return;
+            }
+            const valorHora = Number(empleado.hourlyRate) || 0;
+            let monto = 0;
+            let detalle = '';
+            if (tipo === 'FIXED_AMOUNT') {
+                monto = Number(document.getElementById('ot-fixed').value) || 0;
+                detalle = 'Monto fijo acordado';
+            } else if (tipo === 'TIME_OFF') {
+                detalle = `No se paga en dinero: genera ${horas.toFixed(2)} h de tiempo libre`;
+            } else if (tipo === 'UNPAID') {
+                detalle = 'No se paga';
+            } else {
+                monto = horas * valorHora * m;
+                detalle = `${horas.toFixed(2)} h × ${this.money(valorHora)} la hora${m !== 1 ? ` × ${m}` : ''}`;
+            }
+            caja.innerHTML = `
+                <span class="estimado-titulo">Se le pagará aprox.</span>
+                <strong class="estimado-monto">${this.money(monto)}</strong>
+                <span class="estimado-detalle">${this.esc(detalle)}</span>`;
         };
 
         ['ot-start', 'ot-end'].forEach((id) =>
             document.getElementById(id).addEventListener('change', updateHours)
         );
+        modo.addEventListener('change', () => {
+            ajustarPorTipo();
+            actualizarEstimado();
+        });
+        ['ot-user', 'ot-multiplier', 'ot-fixed'].forEach((id) =>
+            document.getElementById(id).addEventListener('input', actualizarEstimado)
+        );
+        document.getElementById('ot-user').addEventListener('change', actualizarEstimado);
+        ajustarPorTipo();
         updateHours();
 
         document
