@@ -2968,3 +2968,54 @@ body.has-read-only-banner {
   background: #15803d;
   color: #fff;
 }
+
+/* ---------- Empleados agrupados por sede ---------- */
+.fila-grupo td {
+  background: var(--bg-tertiary);
+  padding: 12px 16px;
+  border-top: 2px solid var(--glass-border);
+}
+
+.fila-grupo:hover {
+  background: transparent;
+}
+
+.grupo-titulo {
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-right: 10px;
+}
+
+.grupo-cantidad {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--bg-card-solid);
+  border: 1px solid var(--glass-border);
+  font-size: calc(12px * var(--escala-texto));
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.grupo-detalle {
+  display: block;
+  margin-top: 2px;
+  font-size: calc(12px * var(--escala-texto));
+  color: var(--text-secondary);
+}
+
+.grupo-sin-sede td {
+  background: #fff7e6;
+}
+
+.nota-sede {
+  margin-top: 2px;
+  font-size: calc(12px * var(--escala-texto));
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+.fila-vacia {
+  padding: 12px 16px;
+  font-style: italic;
+}

@@ -102,6 +102,90 @@ window.EmployeesPage = {
             </div>`;
     },
 
+    /**
+     * Arma los grupos de la tabla: Administración, una por sede (con los días
+     * que cada uno trabaja ahí) y al final quienes no tienen sede.
+     *
+     * Un empleado que trabaja en dos sedes aparece en las dos, cada una con
+     * sus días. Solo cuentan las asignaciones vigentes hoy o a futuro.
+     */
+    agruparPorSede(users, sedes, asignaciones) {
+        const DIAS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+        const hoy = new Date().toISOString().slice(0, 10);
+        const vigentes = asignaciones.filter(
+            (a) => !a.validUntil || String(a.validUntil).slice(0, 10) >= hoy
+        );
+
+        // "Lun a Sáb" si los días son seguidos; si no, la lista.
+        const textoDias = (dias) => {
+            const orden = [...new Set(dias)].sort((x, y) => ((x + 6) % 7) - ((y + 6) % 7));
+            if (orden.length === 7) return 'Todos los días';
+            const seguidos = orden.every(
+                (d, i) => i === 0 || (d + 6) % 7 === ((orden[i - 1] + 6) % 7) + 1
+            );
+            return seguidos && orden.length > 2
+                ? `${DIAS[orden[0]]} a ${DIAS[orden[orden.length - 1]]}`
+                : orden.map((d) => DIAS[d]).join(', ');
+        };
+
+        const notaDe = (lista) => {
+            const dias = lista.filter((a) => a.dayOfWeek !== null).map((a) => a.dayOfWeek);
+            const fechas = lista.filter((a) => a.specificDate).map((a) => String(a.specificDate).slice(0, 10));
+            const horario = lista.find((a) => a.startTime && a.endTime);
+            const partes = [];
+            if (dias.length) partes.push(textoDias(dias));
+            if (fechas.length) partes.push(`${fechas.length} fecha${fechas.length === 1 ? '' : 's'} puntual${fechas.length === 1 ? '' : 'es'}`);
+            if (horario) partes.push(`${horario.startTime} – ${horario.endTime}`);
+            return partes.length ? `📅 ${this.esc(partes.join(' · '))}` : '';
+        };
+
+        const admins = users.filter((u) => u.role === 'ADMIN');
+        const personal = users.filter((u) => u.role !== 'ADMIN');
+        const grupos = [];
+
+        if (admins.length) {
+            grupos.push({
+                icono: '🏢',
+                titulo: 'Administración',
+                clase: 'grupo-admin',
+                // El gerente general primero.
+                filas: [...admins].sort((a, b) => Number(b.isOwner) - Number(a.isOwner)).map((user) => ({ user })),
+            });
+        }
+
+        const conSede = new Set();
+        sedes
+            .filter((s) => s.isActive !== false)
+            .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+            .forEach((sede) => {
+                const filas = personal
+                    .map((user) => {
+                        const suyas = vigentes.filter((a) => a.userId === user.id && a.worksiteId === sede.id);
+                        return suyas.length ? { user, nota: notaDe(suyas) } : null;
+                    })
+                    .filter(Boolean);
+                filas.forEach(({ user }) => conSede.add(user.id));
+                grupos.push({ icono: '📍', titulo: sede.name, detalle: sede.address, filas });
+            });
+
+        const sinSede = personal.filter((u) => !conSede.has(u.id));
+        if (sinSede.length) {
+            grupos.push({
+                icono: '⚠️',
+                titulo: 'Sin sede asignada',
+                clase: 'grupo-sin-sede',
+                detalle: 'Asígneles una sede para que puedan marcar asistencia',
+                filas: sinSede.map((user) => ({ user })),
+            });
+        }
+
+        // Una sede sin nadie se muestra igual (sirve para ver que está vacía),
+        // pero con una fila que lo dice.
+        return grupos.map((g) =>
+            g.filas.length ? g : { ...g, filas: [], vacia: true }
+        );
+    },
+
     async loadEmployees() {
         const tbody = document.getElementById('employees-table-body');
         if (!tbody) return;
@@ -109,10 +193,14 @@ window.EmployeesPage = {
         try {
             // El servidor decide quién no tiene sede hoy: replicar acá las
             // reglas de vigencia haría que la alerta y el geocerco discrepen.
-            const [response, sinSede] = await Promise.all([
+            const [response, sinSede, respSedes, respAsignaciones] = await Promise.all([
                 window.api.getUsers(),
                 window.api.getEmployeesWithoutWorksiteToday().catch(() => null),
+                window.api.getWorksites().catch(() => null),
+                window.api.getWorksiteAssignments().catch(() => null),
             ]);
+            const sedes = respSedes?.data || [];
+            const asignaciones = respAsignaciones?.data || [];
 
             const users = response.data || [];
             this.users = users;
@@ -137,8 +225,8 @@ window.EmployeesPage = {
                 TEMPORAL: 'Temporal',
             };
 
-            tbody.innerHTML = users
-                .map((user) => {
+            // `nota` va debajo del nombre (p. ej. los días que trabaja en esa sede).
+            const filaEmpleado = (user, nota = '') => {
                     const fullName = `${user.firstName} ${user.lastName}`;
                     const monthlySalary = parseFloat(user.monthlySalary) || 0;
                     const monthlyHours = parseFloat(user.monthlyHours) || 0;
@@ -200,7 +288,9 @@ window.EmployeesPage = {
 
                     return `
                     <tr id="user-row-${user.id}" class="${!user.isActive ? 'text-muted' : ''}">
-                        <td class="font-weight-medium">${marcaSinSede}${this.esc(fullName)}</td>
+                        <td class="font-weight-medium">${marcaSinSede}${this.esc(fullName)}${
+                            nota ? `<div class="nota-sede">${nota}</div>` : ''
+                        }</td>
                         <td>${
                             user.email || user.phone
                                 ? this.esc([user.email, user.phone].filter(Boolean).join(' · '))
@@ -215,7 +305,24 @@ window.EmployeesPage = {
                         <td class="text-right">${actionBtns}</td>
                     </tr>
                 `;
-                })
+            };
+
+            tbody.innerHTML = this.agruparPorSede(users, sedes, asignaciones)
+                .map(
+                    (grupo) => `
+                    <tr class="fila-grupo ${grupo.clase || ''}">
+                        <td colspan="9">
+                            <span class="grupo-titulo">${grupo.icono} ${this.esc(grupo.titulo)}</span>
+                            <span class="grupo-cantidad">${grupo.filas.length} ${grupo.filas.length === 1 ? 'persona' : 'personas'}</span>
+                            ${grupo.detalle ? `<span class="grupo-detalle">${this.esc(grupo.detalle)}</span>` : ''}
+                        </td>
+                    </tr>
+                    ${
+                        grupo.filas.length
+                            ? grupo.filas.map(({ user, nota }) => filaEmpleado(user, nota)).join('')
+                            : '<tr><td colspan="9" class="text-muted text-sm fila-vacia">Todavía no hay nadie asignado a esta sede.</td></tr>'
+                    }`
+                )
                 .join('');
         } catch (e) {
             console.error('Error al cargar empleados:', e);
