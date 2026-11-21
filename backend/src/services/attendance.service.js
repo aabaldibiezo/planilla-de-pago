@@ -432,6 +432,200 @@ const registerWorkedDay = async (
   });
 };
 
+// --------------- Encargado de sede: marca a su equipo ---------------
+//
+// El encargado de sede, desde su app, marca la entrada y la salida de los
+// temporales y, cuando hace falta (p. ej. un operativo sin celular), la de los
+// operativos de su sede. Se guarda todo: foto de la persona, ubicación del
+// encargado, sede y quién la marcó.
+
+/** Solo un encargado de sede activo puede marcar a otros. */
+const asegurarEncargado = async (companyId, encargadoId) => {
+  const encargado = await prisma.user.findFirst({
+    where: { id: Number(encargadoId), ...scope('user', companyId), isActive: true },
+  });
+  if (!encargado || encargado.role !== 'EMPLOYEE' || !encargado.isSiteManager) {
+    throw new GeofenceError(
+      'NO_ES_ENCARGADO',
+      'Solo el encargado de sede puede marcar la asistencia de otros.'
+    );
+  }
+  return encargado;
+};
+
+/**
+ * Personas que el encargado puede marcar hoy: los operativos asignados a su
+ * sede para hoy y los temporales activos de la empresa (que no tienen sede
+ * fija: vienen el día que se los llama).
+ */
+const personasDelEquipo = async (companyId, encargado, fecha) => {
+  const sedes = await worksiteService.worksitesForUserOnDate(companyId, encargado.id, fecha);
+  const idsSedes = new Set(sedes.map((s) => s.id));
+
+  const candidatos = await prisma.user.findMany({
+    where: {
+      ...scope('user', companyId),
+      role: 'EMPLOYEE',
+      isActive: true,
+      id: { not: encargado.id },
+    },
+    select: { id: true, firstName: true, lastName: true, employeeType: true, isSiteManager: true },
+    orderBy: [{ employeeType: 'asc' }, { lastName: 'asc' }],
+  });
+
+  const personas = [];
+  for (const persona of candidatos) {
+    if (persona.employeeType === 'TEMPORAL') {
+      personas.push(persona);
+      continue;
+    }
+    const suyas = await worksiteService.worksitesForUserOnDate(companyId, persona.id, fecha);
+    if (suyas.some((s) => idsSedes.has(s.id))) personas.push(persona);
+  }
+  return { sedes, personas };
+};
+
+/** Equipo del encargado para hoy, con el estado de cada uno. */
+const teamToday = async (companyId, encargadoId) => {
+  const encargado = await asegurarEncargado(companyId, encargadoId);
+  const now = boliviaDateTime();
+  const { sedes, personas } = await personasDelEquipo(companyId, encargado, now.date);
+
+  const sesiones = await prisma.attendanceSession.findMany({
+    where: {
+      ...scope('attendanceSession', companyId),
+      userId: { in: personas.map((p) => p.id) },
+      OR: [{ workDate: now.date }, { clockOut: null }],
+    },
+    orderBy: { clockIn: 'desc' },
+  });
+
+  return {
+    sedes: sedes.map((s) => ({ id: s.id, name: s.name })),
+    personas: personas.map((p) => {
+      const abierta = sesiones.find((s) => s.userId === p.id && !s.clockOut);
+      const deHoy = sesiones.find((s) => s.userId === p.id && s.clockOut);
+      return {
+        id: p.id,
+        nombre: `${p.firstName} ${p.lastName}`,
+        tipo: p.employeeType,
+        estado: abierta ? 'TRABAJANDO' : deHoy ? 'TERMINO' : 'SIN_MARCAR',
+        sesionAbiertaId: abierta?.id ?? null,
+        entrada: (abierta || deHoy)?.clockIn ?? null,
+        salida: deHoy?.clockOut ?? null,
+      };
+    }),
+  };
+};
+
+/** El encargado tiene que estar en su sede; devuelve la sede donde está. */
+const ubicarEncargado = async (companyId, encargado, fecha, gps) =>
+  evaluarGeocercoEstricto(companyId, encargado.id, fecha, gps);
+
+const teamClockIn = async (
+  companyId,
+  encargadoId,
+  { userId, photo, latitude, longitude, accuracyMeters, deviceInfo }
+) => {
+  const encargado = await asegurarEncargado(companyId, encargadoId);
+  const now = boliviaDateTime();
+  if (!photo) throw new Error('La foto de la persona es obligatoria');
+
+  const { personas } = await personasDelEquipo(companyId, encargado, now.date);
+  const persona = personas.find((p) => p.id === Number(userId));
+  if (!persona) {
+    throw new GeofenceError(
+      'FUERA_DEL_EQUIPO',
+      'Esta persona no está asignada hoy a su sede. Avise a la oficina.'
+    );
+  }
+
+  const ubicacion = await ubicarEncargado(companyId, encargado, now.date, {
+    latitude,
+    longitude,
+    accuracyMeters,
+  });
+
+  const archivo = await photoService.storeAttendancePhoto(photo, {
+    userId: persona.id,
+    workDate: now.date,
+  });
+
+  const quien = `${encargado.firstName} ${encargado.lastName}`;
+  const sesion = await clockInSession(companyId, persona.id, encargado.id, `Marcado por el encargado ${quien}`);
+
+  return prisma.attendanceSession.update({
+    where: { id: sesion.id },
+    data: {
+      photoUrl: archivo.url,
+      photoPublicId: archivo.publicId,
+      capturedLatitude: Number(latitude),
+      capturedLongitude: Number(longitude),
+      gpsAccuracyMeters: accuracyMeters == null ? null : Math.round(Number(accuracyMeters)),
+      distanceMeters: ubicacion.distanceMeters,
+      locationStatus: ubicacion.status,
+      matchedWorksiteId: ubicacion.worksiteId,
+      deviceInfo: deviceInfo ? String(deviceInfo).slice(0, 250) : null,
+      // Queda a la vista que no marcó la propia persona.
+      registeredManually: true,
+      manualReason: `Marcado por el encargado de sede ${quien}`,
+      reviewStatus: 'NOT_REQUIRED',
+    },
+  });
+};
+
+const teamClockOut = async (
+  companyId,
+  encargadoId,
+  sessionId,
+  { photo, latitude, longitude, accuracyMeters } = {}
+) => {
+  const encargado = await asegurarEncargado(companyId, encargadoId);
+  const sesion = await prisma.attendanceSession.findFirst({
+    where: { id: Number(sessionId), ...scope('attendanceSession', companyId) },
+  });
+  if (!sesion) throw new Error('Marcación no encontrada');
+  if (sesion.clockOut) throw new Error('La salida ya fue registrada');
+
+  const now = boliviaDateTime();
+  const { personas } = await personasDelEquipo(companyId, encargado, now.date);
+  if (!personas.some((p) => p.id === sesion.userId)) {
+    throw new GeofenceError(
+      'FUERA_DEL_EQUIPO',
+      'Esta persona no está asignada hoy a su sede. Avise a la oficina.'
+    );
+  }
+
+  const ubicacion = await ubicarEncargado(companyId, encargado, sesion.workDate, {
+    latitude,
+    longitude,
+    accuracyMeters,
+  });
+
+  let archivo = null;
+  if (photo) {
+    archivo = await photoService.storeAttendancePhoto(photo, {
+      userId: sesion.userId,
+      workDate: sesion.workDate,
+    });
+  }
+
+  const cerrada = await clockOutSession(companyId, sesion.id, encargado.id);
+
+  return prisma.attendanceSession.update({
+    where: { id: cerrada.id },
+    data: {
+      clockOutPhotoUrl: archivo?.url ?? null,
+      clockOutPhotoPublicId: archivo?.publicId ?? null,
+      clockOutLatitude: Number(latitude),
+      clockOutLongitude: Number(longitude),
+      clockOutAccuracyMeters: accuracyMeters == null ? null : Math.round(Number(accuracyMeters)),
+      clockOutDistanceMeters: ubicacion.distanceMeters,
+      clockOutLocationStatus: ubicacion.status,
+    },
+  });
+};
+
 /**
  * Marcación abierta del empleado, si la tiene. La app la usa para saber si
  * debe ofrecer "Marcar entrada" o "Marcar salida".
@@ -780,6 +974,9 @@ module.exports = {
   selfClockOut,
   manualClockIn,
   registerWorkedDay,
+  teamToday,
+  teamClockIn,
+  teamClockOut,
   openSessionFor,
   listForReview,
   reviewSession,

@@ -46,6 +46,37 @@ router.post(
   attendanceController.selfClockIn
 );
 
+// --------------- Encargado de sede: marca a su equipo desde la app ---------------
+// El servicio verifica que quien llama sea encargado de sede y que la persona
+// esté asignada hoy a su sede.
+
+router.get('/team/today', attendanceController.teamToday);
+
+router.post(
+  '/team/clock-in',
+  [
+    body('userId').isInt({ min: 1 }).withMessage('Elija a la persona'),
+    body('photo').notEmpty().withMessage('La foto de la persona es obligatoria'),
+    body('latitude').isFloat({ min: -90, max: 90 }).withMessage('Ubicación requerida'),
+    body('longitude').isFloat({ min: -180, max: 180 }).withMessage('Ubicación requerida'),
+    body('accuracyMeters').optional({ nullable: true }).isFloat({ min: 0 }),
+    body('deviceInfo').optional({ nullable: true }).isString().isLength({ max: 250 }),
+  ],
+  attendanceController.teamClockIn
+);
+
+router.patch(
+  '/team/:id/clock-out',
+  [
+    param('id').isInt({ min: 1 }),
+    body('latitude').isFloat({ min: -90, max: 90 }).withMessage('Ubicación requerida'),
+    body('longitude').isFloat({ min: -180, max: 180 }).withMessage('Ubicación requerida'),
+    body('accuracyMeters').optional({ nullable: true }).isFloat({ min: 0 }),
+    body('photo').optional({ nullable: true }).isString(),
+  ],
+  attendanceController.teamClockOut
+);
+
 router.patch(
   '/sessions/self/:id/clock-out',
   [

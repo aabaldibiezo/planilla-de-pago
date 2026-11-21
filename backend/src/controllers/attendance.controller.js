@@ -334,3 +334,92 @@ module.exports = {
   listForReview,
   reviewSession,
 };
+
+// --------------- Encargado de sede: marca a su equipo ---------------
+
+/** Respuesta común de errores de las rutas del equipo. */
+const errorDeEquipo = (error, res, next) => {
+  if (error.name === 'GeofenceError') {
+    return res.status(422).json({ success: false, error: error.message, code: error.code });
+  }
+  if (/pendiente|foto|imagen|tamaño|data URI|vacía|ya fue|no encontrada|no existe/i.test(error.message)) {
+    error.statusCode = 400;
+  }
+  return next(error);
+};
+
+const teamToday = async (req, res, next) => {
+  try {
+    const equipo = await attendanceService.teamToday(req.user.companyId, req.user.id);
+    return res.json({ success: true, data: equipo });
+  } catch (error) {
+    return errorDeEquipo(error, res, next);
+  }
+};
+
+const teamClockIn = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, error: errors.array()[0].msg });
+    }
+    const sesion = await attendanceService.teamClockIn(req.user.companyId, req.user.id, req.body);
+    await auditService.record(req, {
+      action: 'TEAM_CLOCK_IN',
+      entity: 'AttendanceSession',
+      entityId: sesion.id,
+      employeeId: sesion.userId,
+      reason: 'Marcado por el encargado de sede',
+      newData: {
+        locationStatus: sesion.locationStatus,
+        distanceMeters: sesion.distanceMeters,
+        matchedWorksiteId: sesion.matchedWorksiteId,
+        latitude: sesion.capturedLatitude,
+        longitude: sesion.capturedLongitude,
+      },
+    });
+    return res.status(201).json({
+      success: true,
+      data: { id: sesion.id, clockIn: sesion.clockIn, message: 'Entrada registrada' },
+    });
+  } catch (error) {
+    return errorDeEquipo(error, res, next);
+  }
+};
+
+const teamClockOut = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, error: errors.array()[0].msg });
+    }
+    const sesion = await attendanceService.teamClockOut(
+      req.user.companyId,
+      req.user.id,
+      req.params.id,
+      req.body
+    );
+    await auditService.record(req, {
+      action: 'TEAM_CLOCK_OUT',
+      entity: 'AttendanceSession',
+      entityId: sesion.id,
+      employeeId: sesion.userId,
+      reason: 'Marcado por el encargado de sede',
+      newData: {
+        clockOutLocationStatus: sesion.clockOutLocationStatus,
+        latitude: sesion.clockOutLatitude,
+        longitude: sesion.clockOutLongitude,
+      },
+    });
+    return res.json({
+      success: true,
+      data: { id: sesion.id, clockOut: sesion.clockOut, message: 'Salida registrada' },
+    });
+  } catch (error) {
+    return errorDeEquipo(error, res, next);
+  }
+};
+
+module.exports.teamToday = teamToday;
+module.exports.teamClockIn = teamClockIn;
+module.exports.teamClockOut = teamClockOut;

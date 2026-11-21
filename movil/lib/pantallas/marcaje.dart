@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../servicios/api.dart';
 import '../servicios/ubicacion.dart';
 import 'boletas.dart';
+import 'equipo.dart';
 
 /// Pantalla de marcaje: un solo botón que alterna entre entrada y salida.
 ///
@@ -186,6 +187,21 @@ class _PantallaMarcajeState extends State<PantallaMarcaje> {
     }
   }
 
+  /// Encargado de sede: además de su marcaje, marca a su equipo.
+  bool get _esEncargado => widget.usuario['isSiteManager'] == true;
+
+  Future<void> _abrirEquipo() async {
+    // La cámara de esta pantalla se suelta para que la de "Mi equipo" pueda
+    // abrir la trasera; al volver se prepara de nuevo.
+    await _camara?.dispose();
+    if (mounted) setState(() => _camara = null);
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => PantallaEquipo(usuario: widget.usuario)),
+    );
+    await _prepararCamara();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_cargando) {
@@ -201,6 +217,12 @@ class _PantallaMarcajeState extends State<PantallaMarcaje> {
         foregroundColor: Colors.white,
         title: Text('Hola, $nombre'),
         actions: [
+          if (_esEncargado)
+            IconButton(
+              icon: const Icon(Icons.groups),
+              tooltip: 'Mi equipo',
+              onPressed: _abrirEquipo,
+            ),
           IconButton(
             icon: const Icon(Icons.receipt_long),
             tooltip: 'Mis boletas',
@@ -303,6 +325,26 @@ class _PantallaMarcajeState extends State<PantallaMarcaje> {
               ),
             ),
           ),
+          if (_esEncargado) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF0369A1),
+                  side: const BorderSide(color: Color(0xFF0369A1), width: 1.5),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                onPressed: _procesando ? null : _abrirEquipo,
+                icon: const Icon(Icons.groups),
+                label: const Text(
+                  'Marcar a mi equipo',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

@@ -168,6 +168,47 @@ class Api {
     });
   }
 
+  // --------------- Encargado de sede: su equipo ---------------
+
+  /// Personas que el encargado puede marcar hoy, con su estado.
+  static Future<Map<String, dynamic>> equipoDeHoy() async {
+    final datos = await _pedir('GET', '/attendance/team/today');
+    return datos as Map<String, dynamic>;
+  }
+
+  static Future<void> marcarEntradaDe({
+    required int usuarioId,
+    required String foto,
+    required double latitud,
+    required double longitud,
+    double? precision,
+    String? dispositivo,
+  }) async {
+    await _pedir('POST', '/attendance/team/clock-in', cuerpo: {
+      'userId': usuarioId,
+      'photo': foto,
+      'latitude': latitud,
+      'longitude': longitud,
+      'accuracyMeters': precision,
+      'deviceInfo': dispositivo,
+    });
+  }
+
+  static Future<void> marcarSalidaDe({
+    required int sesionId,
+    required String foto,
+    required double latitud,
+    required double longitud,
+    double? precision,
+  }) async {
+    await _pedir('PATCH', '/attendance/team/$sesionId/clock-out', cuerpo: {
+      'photo': foto,
+      'latitude': latitud,
+      'longitude': longitud,
+      'accuracyMeters': precision,
+    });
+  }
+
   // --------------- Boletas ---------------
 
   static Future<List<dynamic>> listarBoletas() async {

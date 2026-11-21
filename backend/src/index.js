@@ -45,6 +45,10 @@ app.use(
  */
 const llevaFoto = (ruta) =>
   ruta === '/api/attendance/sessions/self/clock-in' ||
+  /^\/api\/attendance\/sessions\/self\/\d+\/clock-out$/.test(ruta) ||
+  // El encargado de sede marca a su equipo con la foto de cada persona.
+  ruta === '/api/attendance/team/clock-in' ||
+  /^\/api\/attendance\/team\/\d+\/clock-out$/.test(ruta) ||
   (ruta.startsWith('/api/payments/') && ruta.endsWith('/receipt'));
 
 const jsonEstandar = express.json({ limit: '250kb' });

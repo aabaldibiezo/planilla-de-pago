@@ -126,6 +126,8 @@ window.Auditoria = {
         }
 
         const frases = {
+            'TEAM_CLOCK_IN:AttendanceSession': () => `Marcó la entrada de ${quien()} (como encargado de sede, con foto y ubicación)`,
+            'TEAM_CLOCK_OUT:AttendanceSession': () => `Marcó la salida de ${quien()} (como encargado de sede)`,
             'CREATE:User': () => `Dio de alta a ${quien()}`,
             'UPDATE:User': () => `Modificó los datos de ${quien()}`,
             'DEACTIVATE:User': () => `Dio de baja a ${quien()}`,
