@@ -19,6 +19,7 @@ const PUBLIC_FIELDS = {
   phone: true,
   role: true,
   isOwner: true,
+  isSiteManager: true,
   employeeType: true,
   staffCategory: true,
   monthlySalary: true,
@@ -150,9 +151,6 @@ const create = async (companyId, data, actorId, actor = null) => {
   const dailyWage = isDaily(employeeType) ? parseFloat(data.dailyWage || 0) : 0;
   const hourlyRate = hourlyRateFor({ employeeType, monthlySalary, monthlyHours, dailyWage });
 
-  if ((data.role || 'EMPLOYEE') === 'ADMIN' && !data.password) {
-    throw new Error('La contraseña es obligatoria para administradores');
-  }
   if (data.password) {
     assertPasswordStrength(data.password);
   }
@@ -181,6 +179,8 @@ const create = async (companyId, data, actorId, actor = null) => {
         lastName: data.lastName,
         phone,
         role: data.role || 'EMPLOYEE',
+        // Encargado de sede: solo tiene sentido en el personal de la app.
+        isSiteManager: (data.role || 'EMPLOYEE') === 'EMPLOYEE' && Boolean(data.isSiteManager),
         employeeType,
         staffCategory: data.staffCategory || 'OPERATIVO',
         monthlySalary,
@@ -266,6 +266,11 @@ const update = async (companyId, id, data, actorId, actor = null) => {
   }
   if (data.scheduleType !== undefined) updateData.scheduleType = data.scheduleType;
   if (data.isActive !== undefined) updateData.isActive = data.isActive;
+  if (data.isSiteManager !== undefined || data.role !== undefined) {
+    const rolFinal = data.role ?? existingUser.role;
+    updateData.isSiteManager =
+      rolFinal === 'EMPLOYEE' && Boolean(data.isSiteManager ?? existingUser.isSiteManager);
+  }
 
   // Recalcula el valor de la hora con lo que quede vigente tras el cambio.
   const employeeType = data.employeeType ?? existingUser.employeeType;

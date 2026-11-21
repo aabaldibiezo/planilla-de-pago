@@ -7,6 +7,7 @@ const helmet = require('helmet');
 const { rateLimit } = require('express-rate-limit');
 const { validateEnvironment, allowedOrigins, isProduction } = require('./config/env');
 
+const { registrarActividad } = require('./middleware/actividad');
 const authRoutes = require('./routes/auth.routes');
 const userRoutes = require('./routes/user.routes');
 const attendanceRoutes = require('./routes/attendance.routes');
@@ -78,6 +79,9 @@ app.use(morgan(isProduction ? 'combined' : 'dev'));
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// Registro de actividad de cada empresa (lo ve solo el gerente general).
+app.use('/api', registrarActividad);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);

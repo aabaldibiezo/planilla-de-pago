@@ -11,10 +11,30 @@ const login = async (req, res, next) => {
     }
 
     const { email, password } = req.body;
-    const result = await authService.login(email, password);
+    const result = await authService.login(email, password, req.body.client || null);
+
+    // Cada ingreso queda en el registro de actividad de la empresa, con desde
+    // dónde se entró (panel web o app del celular).
+    if (result.user?.companyId) {
+      const desde = req.body.client === 'web' ? 'el panel web' : 'la app del celular';
+      auditService
+        .record(
+          { user: result.user, ip: req.ip, get: (h) => req.get(h) },
+          {
+            action: 'ACTIVIDAD',
+            entity: 'Cuenta',
+            entityId: result.user.id,
+            newData: { descripcion: `Ingresó al sistema desde ${desde}` },
+          }
+        )
+        .catch((error) => console.error('No se pudo registrar el ingreso:', error.message));
+    }
 
     res.json({ success: true, data: result });
   } catch (error) {
+    if (error.code === 'SOLO_APP') {
+      return res.status(403).json({ success: false, error: error.message, code: error.code });
+    }
     if (error.code === 'COMPANY_INACTIVE') {
       return res.status(403).json({ success: false, error: error.message, code: error.code });
     }

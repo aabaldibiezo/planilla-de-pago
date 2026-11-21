@@ -26,6 +26,8 @@ window.Auditoria = {
         role: 'Rol',
         employeeType: 'Tipo de empleado',
         staffCategory: 'Área',
+        isSiteManager: 'Encargado de sede',
+        isOwner: 'Gerente general',
         monthlySalary: 'Sueldo mensual',
         dailyWage: 'Pago por día',
         hourlyRate: 'Valor de la hora',
@@ -117,6 +119,11 @@ window.Auditoria = {
         const quien = () => this.empleado(row, contexto);
         const mes = (m, y) => (m ? `${this.MESES[Number(m) - 1]} ${y || ''}`.trim() : '');
         const clave = `${row.action}:${row.entity}`;
+
+        // Actividad general (descargas, subidas, ingresos…): ya trae su texto.
+        if (row.action === 'ACTIVIDAD' && n.descripcion) {
+            return `${n.descripcion} (${row.entity})`;
+        }
 
         const frases = {
             'CREATE:User': () => `Dio de alta a ${quien()}`,

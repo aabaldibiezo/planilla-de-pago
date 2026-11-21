@@ -70,10 +70,50 @@ const assertPuedeGestionar = (actor, objetivo, { accion = 'editar', cambios = {}
   }
 };
 
+// --------------- Planilla ---------------
+//
+// Al gerente general no lo paga el sistema. A los administrativos los paga
+// solo el gerente general. Los administrativos pagan al personal (operativos,
+// encargados y temporales) y no ven la planilla de otros administrativos.
+
+/** Filtro de usuarios que entran en la planilla de quien consulta. */
+const filtroPlanilla = (actor) =>
+  esDueno(actor) ? { role: { in: ['EMPLOYEE', 'ADMIN'] }, isOwner: false } : { role: 'EMPLOYEE' };
+
+/** ¿Puede ver o registrar el pago de `persona`? */
+const assertPuedePagarA = (actor, persona) => {
+  if (persona.isOwner) {
+    throw new AdminAccessError('El gerente general no figura en la planilla');
+  }
+  if (persona.role === 'ADMIN' && !esDueno(actor)) {
+    throw new AdminAccessError('Solo el gerente general paga a los administrativos');
+  }
+  if (persona.role !== 'ADMIN' && persona.role !== 'EMPLOYEE') {
+    throw new AdminAccessError('Esta cuenta no figura en la planilla');
+  }
+};
+
+/** ¿Puede ver la boleta de `persona`? Su propia boleta siempre. */
+const puedeVerBoletaDe = (actor, persona) => {
+  if (!actor || !persona) return false;
+  if (actor.id === persona.id) return true;
+  if (actor.role !== 'ADMIN') return false;
+  return persona.role !== 'ADMIN' || esDueno(actor);
+};
+
+// --------------- Acceso por canal ---------------
+
+/** Panel web: gerente general y administrativos. El personal usa la app. */
+const puedeEntrarAlPanelWeb = (usuario) => usuario.role === 'ADMIN' || usuario.role === 'SUPER_ADMIN';
+
 module.exports = {
   AdminAccessError,
   esDueno,
   filtroDeVisibles,
   assertPuedeCrear,
   assertPuedeGestionar,
+  filtroPlanilla,
+  assertPuedePagarA,
+  puedeVerBoletaDe,
+  puedeEntrarAlPanelWeb,
 };

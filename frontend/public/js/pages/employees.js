@@ -262,23 +262,27 @@ window.EmployeesPage = {
                         actionBtns = `<span class="text-muted text-sm">-</span>`;
                     }
 
-                    // If it is the admin, display a badge, and hide some columns if they don't apply
+                    // Solo el gerente general no cobra por planilla; los
+                    // administrativos tienen sueldo como el resto.
                     const isUserAdmin = user.role === 'ADMIN';
-                    const salaryDisp = isUserAdmin
+                    const sinSueldo = Boolean(user.isOwner);
+                    const salaryDisp = sinSueldo
                         ? '-'
                         : user.employeeType === 'TEMPORAL'
                           ? `${window.App.formatCurrency(parseFloat(user.dailyWage) || 0)} / día`
                           : `${window.App.formatCurrency(monthlySalary)} / mes`;
-                    const hoursDisp = isUserAdmin ? '-' : `${monthlyHours} hrs`;
-                    const rateDisp = isUserAdmin
-                        ? '-'
-                        : `${window.App.formatCurrency(hourlyRate)}/h`;
+                    const hoursDisp = sinSueldo || isUserAdmin ? '-' : `${monthlyHours} hrs`;
+                    const rateDisp = sinSueldo ? '-' : `${window.App.formatCurrency(hourlyRate)}/h`;
                     const entryDisp = isUserAdmin ? '-' : `${user.scheduledEntryTime}`;
                     const typeDisp = user.isOwner
                         ? '<span class="badge badge-info">Gerente general</span>'
                         : isUserAdmin
-                        ? '<span class="badge badge-info">Administrador</span>'
-                        : `<span class="badge badge-secondary">${this.esc(typeLabels[user.employeeType] || user.employeeType)}</span>`;
+                          ? '<span class="badge badge-info">💻 Administrativo</span>'
+                          : `${
+                                user.isSiteManager
+                                    ? '<span class="badge badge-warning">📋 Encargado de sede</span> '
+                                    : ''
+                            }<span class="badge badge-secondary">${this.esc(typeLabels[user.employeeType] || user.employeeType)}</span>`;
 
                     // Con geocerco estricto, sin sede asignada no puede fichar.
                     const sinSede = this.sinSedeHoy.has(user.id);
@@ -560,25 +564,37 @@ window.EmployeesPage = {
         const soyDueno = Boolean(window.auth?.getUser?.()?.isOwner);
         const puedeElegirAdmin = soyDueno || (isEdit && user.role === 'ADMIN');
         const rolBloqueado = isEdit && (user.isOwner || (user.role === 'ADMIN' && !soyDueno));
+        // Puesto = rol + si es encargado de sede. El área contable sale sola:
+        // los administrativos van a "salarios administrativos" y el resto a
+        // "salarios operativos" del estado de resultados.
+        const puestoActual = !isEdit
+            ? 'OPERATIVO'
+            : user.role === 'ADMIN'
+              ? 'ADMINISTRATIVO'
+              : user.isSiteManager
+                ? 'ENCARGADO'
+                : 'OPERATIVO';
 
         // --- Paso 2: condiciones de contratación y pago ---
         const paso2 = `
             <div class="flex gap-2 flex-wrap">
                 <div class="form-group flex-1">
-                    <label for="emp-role">Rol en el sistema</label>
-                    <select id="emp-role" class="form-control" required ${rolBloqueado ? 'disabled' : ''}>
-                        <option value="EMPLOYEE" ${isEdit && user.role === 'EMPLOYEE' ? 'selected' : ''}>Empleado</option>
+                    <label for="emp-puesto">Puesto</label>
+                    <select id="emp-puesto" class="form-control" required ${rolBloqueado ? 'disabled' : ''}>
+                        ${
+                            isEdit && user.isOwner
+                                ? '<option value="GERENTE" selected>Gerente general</option>'
+                                : `
+                        <option value="OPERATIVO" ${puestoActual === 'OPERATIVO' ? 'selected' : ''}>Operativo de limpieza</option>
+                        <option value="ENCARGADO" ${puestoActual === 'ENCARGADO' ? 'selected' : ''}>Encargado de sede</option>
                         ${
                             puedeElegirAdmin
-                                ? `<option value="ADMIN" ${isEdit && user.role === 'ADMIN' ? 'selected' : ''}>Administrador</option>`
+                                ? `<option value="ADMINISTRATIVO" ${puestoActual === 'ADMINISTRATIVO' ? 'selected' : ''}>Administrativo (oficina)</option>`
                                 : ''
+                        }`
                         }
                     </select>
-                    ${
-                        soyDueno || isEdit
-                            ? ''
-                            : '<small class="text-muted">Solo el gerente general puede crear administradores.</small>'
-                    }
+                    <small class="text-muted" id="emp-puesto-ayuda"></small>
                 </div>
                 ${
                     // Al crear, el tipo ya se eligió en "¿Fijo o Temporal?" antes de
@@ -595,16 +611,6 @@ window.EmployeesPage = {
                            </div>`
                         : '<input type="hidden" id="emp-type" value="FIJO">'
                 }
-            </div>
-            <div class="flex gap-2">
-                <div class="form-group flex-1">
-                    <label for="emp-staff">Área</label>
-                    <select id="emp-staff" class="form-control">
-                        <option value="OPERATIVO" ${!isEdit || user.staffCategory !== 'ADMINISTRATIVO' ? 'selected' : ''}>Operativo</option>
-                        <option value="ADMINISTRATIVO" ${isEdit && user.staffCategory === 'ADMINISTRATIVO' ? 'selected' : ''}>Administrativo</option>
-                    </select>
-                    <small class="text-muted">Separa las dos líneas de salario del estado de resultados.</small>
-                </div>
             </div>
 
             <!--
@@ -711,7 +717,16 @@ window.EmployeesPage = {
         const salaryInput = document.getElementById('emp-salary');
         const hoursInput = document.getElementById('emp-hours');
         const ratePreview = document.getElementById('emp-rate-preview');
-        const roleSelect = document.getElementById('emp-role');
+        const puestoSelect = document.getElementById('emp-puesto');
+        const puestoAyuda = document.getElementById('emp-puesto-ayuda');
+        const AYUDA_PUESTO = {
+            OPERATIVO: '📱 Usa la app del celular. Marca solo su propia entrada y salida.',
+            ENCARGADO:
+                '📱 Usa la app del celular. Marca su asistencia y la de los temporales y operativos de su sede.',
+            ADMINISTRATIVO:
+                '💻 Entra al panel web. Ve y paga solo al personal; su sueldo lo paga el gerente general.',
+            GERENTE: '💻 Dueño de la empresa: ve y gestiona todo.',
+        };
         const financialFields = document.getElementById('employee-financial-fields');
         const scheduleType = document.getElementById('emp-schedule-type');
         const blocksContainer = document.getElementById('schedule-blocks');
@@ -836,9 +851,11 @@ window.EmployeesPage = {
         };
         typeSelect.addEventListener('change', ajustarTipo);
 
-        // If admin is selected, salary/hours fields can be hidden or disabled since they don't apply.
+        // Los administrativos cobran sueldo como el resto; solo el gerente
+        // general no figura en la planilla.
         const toggleFinancialFields = () => {
-            if (roleSelect.value === 'ADMIN') {
+            puestoAyuda.textContent = AYUDA_PUESTO[puestoSelect.value] || '';
+            if (puestoSelect.value === 'GERENTE') {
                 financialFields.style.opacity = '0.5';
                 salaryInput.disabled = true;
                 hoursInput.disabled = true;
@@ -854,7 +871,7 @@ window.EmployeesPage = {
         };
 
         salaryInput.addEventListener('input', calculateRatePreview);
-        roleSelect.addEventListener('change', toggleFinancialFields);
+        puestoSelect.addEventListener('change', toggleFinancialFields);
 
         // Run calculations initially
         toggleFinancialFields();
@@ -869,9 +886,13 @@ window.EmployeesPage = {
                 firstName: document.getElementById('emp-firstname').value,
                 lastName: document.getElementById('emp-lastname').value,
                 phone: document.getElementById('emp-phone').value.trim(),
-                role: document.getElementById('emp-role').value,
+                // El puesto define rol, encargado y área contable de una vez.
+                role: ['ADMINISTRATIVO', 'GERENTE'].includes(puestoSelect.value) ? 'ADMIN' : 'EMPLOYEE',
+                isSiteManager: puestoSelect.value === 'ENCARGADO',
                 employeeType: document.getElementById('emp-type').value,
-                staffCategory: document.getElementById('emp-staff').value,
+                staffCategory: ['ADMINISTRATIVO', 'GERENTE'].includes(puestoSelect.value)
+                    ? 'ADMINISTRATIVO'
+                    : 'OPERATIVO',
                 monthlyHours: parseFloat(document.getElementById('emp-hours').value),
                 scheduleType: scheduleType.value,
                 scheduleBlocks: [...blocksContainer.querySelectorAll('.schedule-row')].map(

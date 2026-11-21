@@ -26,6 +26,7 @@ const cloudinaryService = require('./cloudinary.service');
 const fs = require('fs/promises');
 const path = require('path');
 const { scope } = require('../lib/tenant');
+const { filtroPlanilla, assertPuedePagarA, esDueno } = require('../lib/admin-access');
 
 /**
  * Check if a payment has already been processed for a user, month and year.
@@ -204,9 +205,15 @@ const calculatePayment = async (companyId, userId, month, year) => {
 /**
  * Calculate payroll previews for all active employees.
  */
-const calculateAll = async (companyId, month, year) => {
+const calculateAll = async (companyId, month, year, actor = null) => {
+  // El gerente general ve también a los administrativos; un administrativo,
+  // solo al personal. Ver lib/admin-access.
   const users = await prisma.user.findMany({
-    where: { ...scope('user', companyId), role: 'EMPLOYEE', isActive: true },
+    where: {
+      ...scope('user', companyId),
+      ...(actor ? filtroPlanilla(actor) : { role: 'EMPLOYEE' }),
+      isActive: true,
+    },
   });
 
   const previews = [];
@@ -308,16 +315,18 @@ const buildPaymentDetails = (metrics) => [
  *
  * Devuelve la ruta de un archivo temporal que el llamador debe eliminar.
  */
-const previewReceipt = async (companyId, userId, month, year) => {
+const previewReceipt = async (companyId, userId, month, year, actor = null) => {
   const uId = parseInt(userId, 10);
 
   const user = await prisma.user.findFirst({
     where: { id: uId, ...scope('user', companyId) },
     include: { company: { select: { name: true, taxId: true } } },
   });
-  if (!user || !user.isActive || user.role !== 'EMPLOYEE') {
+  if (!user || !user.isActive) {
     throw new Error('Empleado no encontrado o inactivo');
   }
+  if (actor) assertPuedePagarA(actor, user);
+  else if (user.role !== 'EMPLOYEE') throw new Error('Empleado no encontrado o inactivo');
 
   if (await checkDuplicate(companyId, uId, month, year)) {
     throw new Error('Ya se ha registrado un pago para este empleado en el mes seleccionado');
@@ -356,7 +365,7 @@ const previewReceipt = async (companyId, userId, month, year) => {
 /**
  * Process a payment: save to DB and generate the downloadable PDF receipt.
  */
-const processPayment = async (companyId, userId, month, year, actorId) => {
+const processPayment = async (companyId, userId, month, year, actorId, actor = null) => {
   const uId = parseInt(userId, 10);
   const m = parseInt(month, 10);
   const y = parseInt(year, 10);
@@ -372,9 +381,11 @@ const processPayment = async (companyId, userId, month, year, actorId) => {
     where: { id: uId, ...scope('user', companyId) },
     include: { company: { select: { name: true, taxId: true } } },
   });
-  if (!user || !user.isActive || user.role !== 'EMPLOYEE') {
+  if (!user || !user.isActive) {
     throw new Error('Empleado no encontrado o inactivo');
   }
+  if (actor) assertPuedePagarA(actor, user);
+  else if (user.role !== 'EMPLOYEE') throw new Error('Empleado no encontrado o inactivo');
 
   const metrics = await calculatePayment(companyId, uId, m, y);
 
@@ -471,8 +482,13 @@ const processPayment = async (companyId, userId, month, year, actorId) => {
 /**
  * Get list of processed payments with optional filters.
  */
-const getHistory = async (companyId, filters) => {
+const getHistory = async (companyId, filters, actor = null) => {
   const where = { ...scope('payment', companyId) };
+  // Un administrativo ve los pagos del personal y los suyos, no los de otros
+  // administrativos. El gerente general ve todos.
+  if (actor && actor.role === 'ADMIN' && !esDueno(actor)) {
+    where.OR = [{ user: { role: 'EMPLOYEE' } }, { userId: actor.id }];
+  }
 
   if (filters.userId) {
     where.userId = parseInt(filters.userId, 10);
@@ -574,6 +590,8 @@ const getById = async (companyId, id) => {
           lastName: true,
           email: true,
           employeeType: true,
+          role: true,
+          isOwner: true,
           monthlyHours: true,
           company: { select: { name: true, taxId: true } },
         },

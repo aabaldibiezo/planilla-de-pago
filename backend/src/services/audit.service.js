@@ -18,8 +18,11 @@ const sanitize = (value) => {
   return clone;
 };
 
-const record = (req, data) =>
-  prisma.auditLog.create({
+const record = (req, data) => {
+  // Avisa al registro de actividad que esta acción ya quedó registrada con
+  // detalle, para no anotarla dos veces.
+  if (req) req.auditado = true;
+  return prisma.auditLog.create({
     data: {
       // null solo en acciones de plataforma (súper administrador), que no
       // pertenecen a ninguna empresa cliente.
@@ -36,6 +39,7 @@ const record = (req, data) =>
       userAgent: req.get('user-agent') || null,
     },
   });
+};
 
 const list = (companyId, filters) => {
   const where = { ...scope('auditLog', companyId) };

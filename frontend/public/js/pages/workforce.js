@@ -63,7 +63,12 @@ window.WorkforcePage = {
                     <button class="btn-secondary workforce-tab" data-tab="overtime">Horas extra</button>
                     <button class="btn-secondary workforce-tab" data-tab="discounts">Descuentos</button>
                     <button class="btn-secondary workforce-tab" data-tab="compensations">Compensaciones</button>
-                    <button class="btn-secondary workforce-tab" data-tab="audit">Registro de cambios</button>
+                    ${
+                        // Solo el gerente general ve quién hizo qué y cuándo.
+                        window.auth?.getUser?.()?.isOwner
+                            ? '<button class="btn-secondary workforce-tab" data-tab="audit">🕵️ Registro de actividad</button>'
+                            : ''
+                    }
                 </div>
             </div>
             <div class="card mb-4" id="workforce-filters"></div>
@@ -259,7 +264,7 @@ window.WorkforcePage = {
                   )
                   .join('')
             : this.empty(5);
-        return `<div class="card-header"><h3 class="card-title">Registro de cambios</h3><p class="text-muted text-sm mb-0">Quién hizo cada cambio en el sistema y cuándo.</p></div><div class="table-container"><table class="table"><thead><tr><th>Fecha y hora</th><th>Quién</th><th>Qué hizo</th><th>Motivo</th><th></th></tr></thead><tbody>${body}</tbody></table></div>`;
+        return `<div class="card-header"><h3 class="card-title">Registro de actividad</h3><p class="text-muted text-sm mb-0">Todo lo que hace cada persona: altas, cambios, borrados, archivos subidos y descargados, e ingresos. Solo lo ve el gerente general.</p></div><div class="table-container"><table class="table"><thead><tr><th>Fecha y hora</th><th>Quién</th><th>Qué hizo</th><th>Motivo</th><th></th></tr></thead><tbody>${body}</tbody></table></div>`;
     },
 
     primaryAction() {

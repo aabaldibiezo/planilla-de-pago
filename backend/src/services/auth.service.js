@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const prisma = require('../lib/prisma');
 const { PUBLIC_FIELDS } = require('./user.service');
 const { normalizePhone, isEmailLike } = require('../lib/contact');
+const { puedeEntrarAlPanelWeb } = require('../lib/admin-access');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
@@ -13,7 +14,7 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
  * `mustChangePassword` viaja en la respuesta para que el cliente (web o móvil)
  * lleve al usuario directo a la pantalla de cambio de contraseña.
  */
-const login = async (identifier, password) => {
+const login = async (identifier, password, cliente = null) => {
   // Se entra con el correo o con el celular. Los dos son únicos a nivel
   // global, así que la búsqueda no lleva empresa: es justamente lo que hace
   // posible un único formulario de acceso para súper administradores,
@@ -36,6 +37,16 @@ const login = async (identifier, password) => {
   }
 
   // Una empresa dada de baja no puede acceder; una vencida sí, en solo lectura.
+  // El personal (operativos y encargados de sede) usa solo la app móvil; el
+  // panel web es del gerente general y los administrativos.
+  if (cliente === 'web' && !puedeEntrarAlPanelWeb(user)) {
+    const error = new Error(
+      'Esta cuenta es para la app de asistencia del celular. Descárguela en /descargar.'
+    );
+    error.code = 'SOLO_APP';
+    throw error;
+  }
+
   if (user.company && !user.company.isActive) {
     const error = new Error(
       'El acceso de su empresa está suspendido. Comuníquese con el proveedor del sistema.'

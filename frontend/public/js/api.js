@@ -139,7 +139,8 @@ class ApiClient {
     // ========================
 
     async login(email, password) {
-        return this.post('/auth/login', { email, password });
+        // `client: 'web'`: el servidor no deja entrar acá al personal de la app.
+        return this.post('/auth/login', { email, password, client: 'web' });
     }
 
     async getMe() {

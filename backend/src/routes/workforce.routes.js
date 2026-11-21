@@ -9,7 +9,18 @@ const {
   enforceCompanyStatus,
 } = require('../middleware/auth');
 
+const { esDueno } = require('../lib/admin-access');
+
 const router = Router();
+
+// El registro de actividad (quién hizo qué y cuándo) es solo del gerente general.
+const soloGerenteGeneral = (req, res, next) =>
+  esDueno(req.user)
+    ? next()
+    : res.status(403).json({
+        success: false,
+        error: 'Solo el gerente general puede ver el registro de actividad',
+      });
 const time = /^([01]\d|2[0-3]):[0-5]\d$/;
 const modes = [
   'SAME_RATE',
@@ -132,6 +143,7 @@ router.get(
     query('action').optional().trim().isLength({ max: 80 }),
     query('entity').optional().trim().isLength({ max: 80 }),
   ],
+  soloGerenteGeneral,
   controller.listAudit
 );
 

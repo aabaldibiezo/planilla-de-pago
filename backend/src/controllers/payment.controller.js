@@ -4,6 +4,7 @@ const { validationResult } = require('express-validator');
 const paymentService = require('../services/payment.service');
 const pdfService = require('../services/pdf.service');
 const auditService = require('../services/audit.service');
+const { puedeVerBoletaDe } = require('../lib/admin-access');
 
 const calculate = async (req, res, next) => {
   try {
@@ -25,7 +26,12 @@ const calculate = async (req, res, next) => {
       return res.status(400).json({ success: false, error: 'Mes y año válidos son requeridos' });
     }
 
-    const calculations = await paymentService.calculateAll(req.user.companyId, month, year);
+    const calculations = await paymentService.calculateAll(
+      req.user.companyId,
+      month,
+      year,
+      req.user
+    );
     res.json({ success: true, data: calculations });
   } catch (error) {
     next(error);
@@ -45,7 +51,8 @@ const pay = async (req, res, next) => {
       userId,
       month,
       year,
-      req.user.id
+      req.user.id,
+      req.user
     );
     await auditService.record(req, {
       action: 'PAY',
@@ -60,6 +67,9 @@ const pay = async (req, res, next) => {
       return res
         .status(409)
         .json({ success: false, error: 'El pago ya fue registrado por otra solicitud' });
+    }
+    if (error.name === 'AdminAccessError') {
+      return res.status(403).json({ success: false, error: error.message, code: error.code });
     }
     if (error.message.includes('ya se ha registrado') || error.message.includes('no encontrado')) {
       return res.status(400).json({ success: false, error: error.message });
@@ -80,7 +90,7 @@ const getHistory = async (req, res, next) => {
       year: req.query.year || undefined,
     };
 
-    const payments = await paymentService.getHistory(req.user.companyId, filters);
+    const payments = await paymentService.getHistory(req.user.companyId, filters, req.user);
     res.json({ success: true, data: payments });
   } catch (error) {
     next(error);
@@ -103,8 +113,8 @@ const getPdf = async (req, res, next) => {
       return res.status(404).json({ success: false, error: 'Comprobante no disponible' });
     }
 
-    // Un empleado solo puede descargar su propia boleta.
-    if (req.user.role !== 'ADMIN' && payment.userId !== req.user.id) {
+    // Cada uno ve su boleta; un administrativo no ve la de otro administrativo.
+    if (!puedeVerBoletaDe(req.user, { id: payment.userId, ...payment.user })) {
       return res
         .status(403)
         .json({ success: false, error: 'Solo puede descargar sus propios comprobantes' });
@@ -150,7 +160,8 @@ const previewReceipt = async (req, res, next) => {
       req.user.companyId,
       req.query.userId,
       req.query.month,
-      req.query.year
+      req.query.year,
+      req.user
     );
 
     res.setHeader('Content-Type', 'application/pdf');
@@ -161,6 +172,9 @@ const previewReceipt = async (req, res, next) => {
       if (error && !res.headersSent) next(error);
     });
   } catch (error) {
+    if (error.name === 'AdminAccessError') {
+      return res.status(403).json({ success: false, error: error.message, code: error.code });
+    }
     if (/no encontrado|inactivo|ya se ha registrado/i.test(error.message)) {
       return res.status(400).json({ success: false, error: error.message });
     }
@@ -178,7 +192,7 @@ const monthlyReport = async (req, res, next) => {
     const month = Number(req.query.month);
     const year = Number(req.query.year);
 
-    const payments = await paymentService.getHistory(req.user.companyId, { month, year });
+    const payments = await paymentService.getHistory(req.user.companyId, { month, year }, req.user);
     const company = await paymentService.getIssuingCompany(req.user.companyId);
     const file = await pdfService.generateMonthlyReport(payments, month, year, company);
 
@@ -252,8 +266,8 @@ const getReceipt = async (req, res, next) => {
       return res.status(404).json({ success: false, error: 'Ese pago no tiene recibo adjunto' });
     }
 
-    // Un empleado solo puede ver el recibo de su propio pago.
-    if (req.user.role !== 'ADMIN' && payment.userId !== req.user.id) {
+    // Mismo criterio que la boleta.
+    if (!puedeVerBoletaDe(req.user, { id: payment.userId, ...payment.user })) {
       return res.status(403).json({ success: false, error: 'Solo puede ver sus propios recibos' });
     }
 
