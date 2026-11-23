@@ -44,6 +44,8 @@ router.post(
 
 // Antes de `/:id`: si no, Express tomaría "collections" como un id.
 router.get('/collections/pending', controller.pendingCollections);
+// Contratos que vencen en las próximas 2 semanas (o vencidos sin renovar).
+router.get('/contracts/expiring', controller.expiringContracts);
 
 router.get('/:id', [param('id').isInt({ min: 1 })], controller.getById);
 

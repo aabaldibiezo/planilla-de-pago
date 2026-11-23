@@ -2,6 +2,7 @@ const prisma = require('../lib/prisma');
 const { scope } = require('../lib/tenant');
 const { rateForMonth, currentRate } = require('../lib/contract-rates');
 const { pendingCollections: calcularPendientes } = require('../lib/collections');
+const { contratosPorVencer } = require('../lib/contract-expiry');
 const { boliviaToday } = require('../lib/business-rules');
 
 /**
@@ -392,6 +393,37 @@ const pendingCollections = async (companyId) => {
   });
 };
 
+/**
+ * Contratos por vencer (próximas 2 semanas) o vencidos hace poco y sin
+ * renovar, para avisar y renovarlos a tiempo. Ver lib/contract-expiry.
+ */
+const expiringContracts = async (companyId) => {
+  const contratos = await prisma.contract.findMany({
+    where: { ...scope('contract', companyId), isActive: true, endDate: { not: null } },
+    include: {
+      client: { select: { id: true, name: true, isActive: true } },
+      rates: { select: CONTRACT_RATE_FIELDS },
+    },
+  });
+  const activos = contratos.filter((c) => c.client.isActive !== false);
+  const porId = new Map(activos.map((c) => [c.id, c]));
+
+  return contratosPorVencer(activos, boliviaToday()).map((v) => {
+    const contrato = porId.get(v.contractId);
+    const montoVigente = [...contrato.rates]
+      .sort((a, b) => new Date(b.validFrom) - new Date(a.validFrom))
+      .find((r) => new Date(r.validFrom) <= new Date());
+    return {
+      ...v,
+      contractName: contrato.name,
+      reference: contrato.reference,
+      clientId: contrato.client.id,
+      clientName: contrato.client.name,
+      monthlyAmount: montoVigente ? Number(montoVigente.amount) : null,
+    };
+  });
+};
+
 /** Registra que se cobró un mes de un contrato, con el monto que rigió ese mes. */
 const collect = async (companyId, contractId, { month, year, notes }, actorId) => {
   const contrato = await contratoDeLaEmpresa(companyId, contractId);
@@ -437,6 +469,7 @@ const undoCollection = async (companyId, contractId, month, year) => {
 
 module.exports = {
   pendingCollections,
+  expiringContracts,
   collect,
   undoCollection,
   list,

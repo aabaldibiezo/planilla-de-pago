@@ -1,15 +1,17 @@
 /**
- * Recordatorio flotante de cobros a clientes.
+ * Aviso flotante de contratos y cobros.
  *
- * Un botón fijo en la esquina muestra cuántos cobros hay pendientes: los que
- * vencen en pocos días y los ya vencidos (en rojo). Al tocarlo se ven uno por
- * uno con su monto y su vencimiento, y se marcan como cobrados.
+ * Lo primero que avisa son los CONTRATOS POR VENCER: los que terminan en las
+ * próximas 2 semanas (y los vencidos hace poco sin renovar, en rojo), para
+ * renovarlos a tiempo y no perder al cliente. Además muestra los cobros a
+ * clientes pendientes.
  *
  * Solo para administradores. Se refresca al cambiar de pantalla, así que un
- * contrato nuevo o un cobro registrado se reflejan sin recargar.
+ * contrato renovado o un cobro registrado se reflejan sin recargar.
  */
 window.Cobros = {
     pendientes: [],
+    porVencer: [],
     MESES: [
         'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
         'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
@@ -42,23 +44,65 @@ window.Cobros = {
             boton.classList.add('hidden');
             return;
         }
-        try {
-            this.pendientes = (await window.api.get('/clients/collections/pending')).data || [];
-        } catch {
-            // Sin la consulta no se muestra nada: mejor eso que un aviso falso.
-            this.pendientes = [];
-        }
+        // Sin la consulta no se muestra nada: mejor eso que un aviso falso.
+        const [pendientes, porVencer] = await Promise.all([
+            window.api.get('/clients/collections/pending').then((r) => r.data || []).catch(() => []),
+            window.api.get('/clients/contracts/expiring').then((r) => r.data || []).catch(() => []),
+        ]);
+        this.pendientes = pendientes;
+        this.porVencer = porVencer;
 
-        const total = this.pendientes.length;
-        const vencidos = this.pendientes.filter((p) => p.overdue).length;
-        boton.classList.toggle('hidden', total === 0);
-        boton.classList.toggle('vencido', vencidos > 0);
-        boton.innerHTML = `
-            <span class="cobros-icono">💰</span>
-            <span class="cobros-texto">${total} ${total === 1 ? 'cobro pendiente' : 'cobros pendientes'}${
-                vencidos ? ` · <strong>${vencidos} ${vencidos === 1 ? 'vencido' : 'vencidos'}</strong>` : ''
-            }</span>`;
-        boton.title = 'Ver los cobros a clientes que hay que hacer';
+        const contratos = this.porVencer.length;
+        const cobros = this.pendientes.length;
+        const urgente =
+            this.porVencer.some((c) => c.expired || c.daysLeft <= 3) || this.pendientes.some((p) => p.overdue);
+
+        boton.classList.toggle('hidden', contratos + cobros === 0);
+        boton.classList.toggle('vencido', urgente);
+
+        const partes = [];
+        if (contratos) {
+            partes.push(
+                `<span class="cobros-icono">📄</span><span class="cobros-texto"><strong>${contratos}</strong> ${
+                    contratos === 1 ? 'contrato por vencer' : 'contratos por vencer'
+                }</span>`
+            );
+        }
+        if (cobros) {
+            partes.push(
+                `<span class="cobros-icono">💰</span><span class="cobros-texto">${cobros} ${
+                    cobros === 1 ? 'cobro' : 'cobros'
+                }</span>`
+            );
+        }
+        boton.innerHTML = partes.join('<span class="cobros-separador">·</span>');
+        boton.title = 'Contratos que hay que renovar y cobros pendientes';
+    },
+
+    /** "Vence en 5 días", "Vence hoy", "Venció hace 3 días". */
+    textoVencimiento(c) {
+        if (c.expired) return `Venció hace ${-c.daysLeft} ${c.daysLeft === -1 ? 'día' : 'días'}`;
+        if (c.daysLeft === 0) return 'Vence hoy';
+        if (c.daysLeft === 1) return 'Vence mañana';
+        return `Vence en ${c.daysLeft} días`;
+    },
+
+    /** Lleva al contrato en Clientes y abre su edición para poner la nueva fecha de fin. */
+    async renovar(c) {
+        window.App.hideModal();
+        await window.App.navigateTo('clients');
+        const pagina = window.ClientsPage;
+        for (let i = 0; i < 20 && !pagina?.clientes?.length; i += 1) {
+            await new Promise((r) => setTimeout(r, 250));
+        }
+        const cliente = pagina?.clientes?.find((x) => x.id === c.clientId);
+        const contrato = cliente?.contracts?.find((k) => k.id === c.contractId);
+        if (cliente && contrato) {
+            pagina.abrirFormularioContrato(cliente, contrato);
+            window.App.showToast('Ponga la nueva "Fecha de fin" y guarde para renovarlo.', 'info');
+        } else {
+            window.App.showToast(`Busque el contrato de ${c.clientName} en esta lista.`, 'info');
+        }
     },
 
     abrir() {
@@ -82,19 +126,49 @@ window.Cobros = {
             })
             .join('');
 
+        const filasContratos = this.porVencer
+            .map((c, indice) => {
+                const urgente = c.expired || c.daysLeft <= 3;
+                return `
+                    <div class="cobro-fila ${urgente ? 'vencido' : ''}">
+                        <div class="cobro-datos">
+                            <strong>${this.esc(c.clientName)}</strong>
+                            <span class="text-muted text-sm">${this.esc(c.contractName)}${
+                                c.reference ? ` · N.º ${this.esc(c.reference)}` : ''
+                            } · termina el ${this.fecha(c.endDate)}</span>
+                            <span class="text-sm"><span class="badge ${urgente ? 'badge-danger' : 'badge-warning'}">${this.textoVencimiento(c)}</span></span>
+                        </div>
+                        <div class="cobro-acciones">
+                            ${c.monthlyAmount ? `<strong class="cobro-monto">${window.App.formatCurrency(c.monthlyAmount)}<small class="text-muted"> /mes</small></strong>` : ''}
+                            <button type="button" class="btn-primary btn-sm" data-renovar="${indice}">🔄 Renovar</button>
+                        </div>
+                    </div>`;
+            })
+            .join('');
+
         window.App.showModal(
-            'Cobros pendientes a clientes',
+            'Contratos y cobros',
             `<div class="mt-2">
+                <h4 class="aviso-titulo">📄 Contratos por vencer</h4>
+                <p class="text-muted text-sm mb-3">
+                    Vencen en las próximas 2 semanas o ya vencieron sin renovarse. Renuévelos a tiempo para no
+                    perder al cliente y mantener al día la facturación y los impuestos.
+                </p>
+                ${filasContratos || '<p class="text-muted text-sm mb-3">Ningún contrato vence en las próximas 2 semanas.</p>'}
+                <h4 class="aviso-titulo mt-4">💰 Cobros pendientes</h4>
                 <p class="text-muted text-sm mb-3">
                     Toque <strong>✓ Cobrado</strong> cuando el cliente pague. Si se equivoca, puede deshacerlo
                     enseguida desde el aviso.
                 </p>
-                ${filas || '<p class="text-muted">No hay cobros pendientes.</p>'}
+                ${filas || '<p class="text-muted text-sm">No hay cobros pendientes.</p>'}
             </div>`
         );
 
         document.querySelectorAll('[data-cobrar]').forEach((boton) =>
             boton.addEventListener('click', () => this.cobrar(this.pendientes[Number(boton.dataset.cobrar)], boton))
+        );
+        document.querySelectorAll('[data-renovar]').forEach((boton) =>
+            boton.addEventListener('click', () => this.renovar(this.porVencer[Number(boton.dataset.renovar)]))
         );
     },
 
@@ -108,7 +182,7 @@ window.Cobros = {
             });
             this.avisarConDeshacer(pendiente);
             await this.refrescar();
-            if (this.pendientes.length) this.abrir();
+            if (this.pendientes.length || this.porVencer.length) this.abrir();
             else window.App.hideModal();
         } catch (error) {
             window.App.showToast(error.message, 'error');

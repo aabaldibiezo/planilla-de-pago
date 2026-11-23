@@ -3066,3 +3066,16 @@ body.has-read-only-banner {
   font-size: calc(12px * var(--escala-texto));
   color: var(--text-secondary);
 }
+
+/* Aviso flotante: contratos por vencer y cobros. */
+.cobros-separador {
+  opacity: 0.6;
+  margin: 0 2px;
+}
+
+.aviso-titulo {
+  font-size: calc(15px * var(--escala-texto));
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}

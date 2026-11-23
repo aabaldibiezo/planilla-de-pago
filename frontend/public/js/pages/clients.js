@@ -578,6 +578,8 @@ window.ClientsPage = {
                 window.App.hideModal();
                 window.App.showToast(esEdicion ? 'Contrato actualizado.' : 'Contrato creado.', 'success');
                 await this.cargar();
+                // Un contrato renovado deja de figurar en el aviso de contratos por vencer.
+                window.Cobros?.refrescar();
                 // Fechas, día de cobro o monto cambian lo que hay que cobrar.
                 window.Cobros?.refrescar();
             } catch (fallo) {

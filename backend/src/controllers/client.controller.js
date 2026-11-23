@@ -152,6 +152,8 @@ exports.rateForPeriod = handle((req) =>
 
 exports.pendingCollections = handle((req) => clientService.pendingCollections(req.user.companyId));
 
+exports.expiringContracts = handle((req) => clientService.expiringContracts(req.user.companyId));
+
 exports.collect = handle(async (req) => {
   const cobro = await clientService.collect(
     req.user.companyId,
